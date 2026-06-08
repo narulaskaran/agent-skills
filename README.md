@@ -31,6 +31,12 @@ Opinionated, skills for AI agents which I've developed over time from my own Her
 | [writing-plans](software-development/writing-plans/SKILL.md) | Write implementation plans for zero-context implementers: exact files, complete code, testing commands, verification steps. Bite-sized tasks, DRY, YAGNI. |
 | [consistency-check](software-development/consistency-check/SKILL.md) | Verify multi-part outputs before marking done. Every requirement → satisfied, every deliverable → written and verified, no orphaned pieces. |
 
+### Health
+
+| Skill | What it does |
+|-------|-------------|
+| [food-tracking](health/food-tracking/SKILL.md) | Track daily food intake with calories, protein, and fiber. Supports photo-based and text-based entries, restaurant menu research, and gut health troubleshooting. Battle-tested methodology for consistent agent food logging — never drop a meal again. |
+
 ## How skills are made
 
 These come from real sessions where an agent tried to do something, failed, iterated, and eventually identified a reliable path. The skill captures that path so the next agent (or person, or teammate) doesn't pay the discovery tax again.
