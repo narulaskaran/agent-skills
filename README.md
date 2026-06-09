@@ -7,10 +7,10 @@ Opinionated, skills for AI agents which I've developed over time from my own Her
 
 | Skill | What it does | 
 |-------|-------------|
-| [shopify-stripe-checkout](browser-use/shopify-stripe-checkout/SKILL.md) | Checkout on any Shopify store. Handles Stripe PCI iframes (CDP keystroke injection), cart API, discount codes. Generalized from Birch Coffee. | 
+| [shopify-stripe-checkout](browser-use/shopify-stripe-checkout/SKILL.md) | Checkout at online Shopify stores. Handles Stripe PCI iframes (CDP keystroke injection), cart API, discount codes. Generalized from Birch Coffee. | 
 | [postalform-mailing](browser-use/postalform-mailing/SKILL.md) | Design and mail physical postcards via PostalForm. Covers image generation, HTML card design to bleed specs, PDF export, base64 JPEG workaround, batch orders, SPT recovery, MPP machine API payment via Stripe Link CLI. | 
 | [postalform-checkout](browser-use/postalform-checkout/SKILL.md) | Browser-based PostalForm website checkout — fallback for when the MPP API is rate-limited. |
-| [postalform-lessons](browser-use/postalform-lessons/SKILL.md) | Battle-tested patterns from PostalForm + MPP flows. Prevents hours of debugging. Key: compress PDFs to JPEG, base64 data URLs, mppx serialization, one SPT per payment, space orders 1h apart. |
+| [postalform-lessons](browser-use/postalform-lessons/SKILL.md) | Patterns from PostalForm + MPP flows. Prevents hours of debugging. Key: compress PDFs to JPEG, base64 data URLs, mppx serialization, one SPT per payment, space orders 1h apart. |
 | [autobrowse-workflow](browser-use/autobrowse-workflow/SKILL.md) | Meta-skill for building reliable browser automation skills. Iterative trace-driven improvement via delegate_task inner agents. The methodology behind all checkout skills in this repo. |
 | [web-checkout](browser-use/web-checkout/SKILL.md) | Decision patterns for autonomous web checkout: API vs browser, CAPTCHAs, payment iframes, rate limits. When to fall back, when to push through. |
 
@@ -25,21 +25,21 @@ Opinionated, skills for AI agents which I've developed over time from my own Her
 
 | Skill | What it does |
 |-------|-------------|
-| [systematic-debugging](software-development/systematic-debugging/SKILL.md) | 4-phase root cause debugging. Understand before fixing — symptom patches are failure. References for Python and Node debugging. |
-| [requesting-code-review](software-development/requesting-code-review/SKILL.md) | Pre-commit verification pipeline: security scan, baseline-aware quality gates, independent reviewer subagent, auto-fix loop. No agent verifies its own work. |
-| [subagent-driven-development](software-development/subagent-driven-development/SKILL.md) | Execute implementation plans via delegate_task subagents with two-stage review (spec then quality). Fresh context per task finds what you miss. |
-| [writing-plans](software-development/writing-plans/SKILL.md) | Write implementation plans for zero-context implementers: exact files, complete code, testing commands, verification steps. Bite-sized tasks, DRY, YAGNI. |
-| [consistency-check](software-development/consistency-check/SKILL.md) | Verify multi-part outputs before marking done. Every requirement → satisfied, every deliverable → written and verified, no orphaned pieces. |
+| [systematic-debugging](software-development/systematic-debugging/SKILL.md) | 4-phase root cause debugging. Understand an issue before fixing. |
+| [requesting-code-review](software-development/requesting-code-review/SKILL.md) | Pre-commit verification pipeline: security scan, baseline-aware quality gates, independent reviewer subagent, auto-fix loop. |
+| [subagent-driven-development](software-development/subagent-driven-development/SKILL.md) | Execute implementation plans via delegate_task subagents with two-stage review (spec then quality). |
+| [writing-plans](software-development/writing-plans/SKILL.md) | Write implementation plans for zero-context implementers: exact files, complete code, testing commands, verification steps. |
+| [consistency-check](software-development/consistency-check/SKILL.md) | Verify multi-part outputs before marking done. Every requirement → satisfied, every deliverable → written and verified. |
 
 ### Health
 
 | Skill | What it does |
 |-------|-------------|
-| [food-tracking](health/food-tracking/SKILL.md) | Track daily food intake with calories, protein, and fiber. Supports photo-based and text-based entries, restaurant menu research, and gut health troubleshooting. Battle-tested methodology for consistent agent food logging — never drop a meal again. |
+| [food-tracking](health/food-tracking/SKILL.md) | Track daily food intake with calories, protein, and fiber. Supports photo-based and text-based entries, restaurant menu research, and health troubleshooting. |
 
 ## How skills are made
 
-These come from real sessions where an agent tried to do something, failed, iterated, and eventually identified a reliable path. The skill captures that path so the next agent (or person, or teammate) doesn't pay the discovery tax again.
+These come from real sessions where either an agent tried to do something, failed, iterated, and eventually identified a reliable path, or where I requested and fine tuned a workflow for my own usage.
 
 ## Contributing
 
