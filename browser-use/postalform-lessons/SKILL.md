@@ -8,6 +8,8 @@ version: 1.0.0
 
 After burning ~20 upload tokens, hitting rate limits, and debugging MPP payment flow for 4 hours. These are the hard-won patterns that actually work.
 
+⚠️ **PII:** Names, emails, and payment IDs use `{{PII_*}}` placeholders. Load `~/.hermes/memory/pii.json` and replace before executing.
+
 ## The Golden Path (What Works)
 
 ### 1. Compress PDFs BEFORE anything else
@@ -107,12 +109,12 @@ with open("card-jpg.pdf", "rb") as f:
 # 2. Build payload
 payload = {
     "request_id": str(uuid.uuid4()),
-    "buyer_name": "Jane Doe",
-    "buyer_email": "user@example.com",
+    "buyer_name": "{{PII_KARAN_NAME}}",
+    "buyer_email": "{{PII_KARAN_EMAIL}}",
     "mailpiece_type": "postcard",
     "postcard_size": "4x6",
     "pdf": f"data:application/pdf;base64,{pdf_b64}",
-    "sender_name": "Jane Doe",
+    "sender_name": "{{PII_KARAN_NAME}}",
     "sender_address_type": "Manual",
     "sender_address_manual": {"line1":"...","city":"...","state":"NY","zip":"..."},
     "recipient_name": "...",
@@ -145,7 +147,7 @@ nid = d['network_id']; amt = d['request_json']['amount']
 
 # 7. Create spend-request (context MUST be >=100 chars)
 sr = subprocess.run(["npx","-y","@stripe/link-cli","spend-request","create",
-    "--paymentMethodId","pm_visa_xxxxxxxxxxxx",
+    "--paymentMethodId","{{PII_LINK_PM_ID}}",
     "--credentialType","shared_payment_token",
     "--networkId",nid,"--amount",amt,"--currency","usd",
     "--context","PostalForm 4x6 Ghibli postcard for <name> — <city> <state>. Mother's Day card. Part of batch of cards for friends at $2 each.",

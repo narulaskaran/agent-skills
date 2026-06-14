@@ -9,6 +9,8 @@ End-to-end: generate illustrated card art → design HTML card → export PDF to
 
 ⚠️ **Before using this skill, load `postalform-lessons` and `mpp-payments` skills.** They contain battle-tested patterns that prevent hours of debugging. Key: compress PDFs to JPEG, use base64 data URLs (never upload tokens), mppx serialization for auth, one SPT per payment, space orders 1h apart.
 
+⚠️ **PII:** Names, emails, addresses, and payment IDs use `{{PII_*}}` placeholders. Load `~/.hermes/memory/pii.json` and replace placeholders before executing.
+
 ## Quick Reference
 
 | Step | Tool |
@@ -217,15 +219,15 @@ Content-Type: application/json
 
 {
   "request_id": "<UUID>",
-  "buyer_name": "Jane Doe",
-  "buyer_email": "user@example.com",
+  "buyer_name": "{{PII_KARAN_NAME}}",
+  "buyer_email": "{{PII_KARAN_EMAIL}}",
   "mailpiece_type": "postcard",
   "postcard_size": "6x9",
   "pdf": "data:application/pdf;base64,...",
-  "sender_name": "Jane Doe",
+  "sender_name": "{{PII_KARAN_NAME}}",
   "sender_address_type": "Manual",
   "sender_address_manual": {"line1": "...", "line2": "...", "city": "...", "state": "NY", "zip": "..."},
-  "recipient_name": "Jane Smith",
+  "recipient_name": "{{PII_MOM_NAME}}",
   "recipient_address_type": "Manual",
   "recipient_address_manual": {"line1": "...", "city": "...", "state": "WA", "zip": "..."}
 }
@@ -252,11 +254,11 @@ GET https://postalform.com/api/machine/mpp/orders/:id
 
 ### Step 6: Pay via Link CLI (MPP Stripe SPT)
 
-the user's Link account is already authenticated via `@stripe/link-cli`. The SPT flow eliminates the need for PostalForm's Stripe keys.
+The user's Link account is already authenticated via `@stripe/link-cli`. The SPT flow eliminates the need for PostalForm's Stripe keys.
 
 **Prerequisites:**
 - Link CLI installed and authenticated (`npx -y @stripe/link-cli`)
-- Default payment method: Visa Credit (ID: `pm_visa_xxxxxxxxxxxx`, last4 1116)
+- Default payment method: Visa Credit (ID: `{{PII_LINK_PM_ID}}`, last4 {{PII_CARD_LAST4}})
 - User must approve spend-request in the Link mobile app
 
 **Flow:**
@@ -272,7 +274,7 @@ the user's Link account is already authenticated via `@stripe/link-cli`. The SPT
 2. **Create spend-request** for SPT credential:
    ```bash
    npx -y @stripe/link-cli spend-request create \
-     --paymentMethodId "pm_visa_xxxxxxxxxxxx" \
+     --paymentMethodId "{{PII_LINK_PM_ID}}" \
      --credentialType shared_payment_token \
      --networkId "<network_id_from_decode>" \
      --amount <amount_in_cents> \
@@ -324,12 +326,12 @@ When SPT token is already approved (e.g., from prior spend-request) and user isn
    ```json
    {
      "request_id": "<fresh UUID>",
-     "buyer_name": "Jane Doe",
-     "buyer_email": "user@example.com",
+     "buyer_name": "{{PII_KARAN_NAME}}",
+     "buyer_email": "{{PII_KARAN_EMAIL}}",
      "mailpiece_type": "postcard",
      "postcard_size": "4x6",
      "pdf": "data:application/pdf;base64,...",
-     "sender_name": "Jane Doe",
+     "sender_name": "{{PII_KARAN_NAME}}",
      "sender_address_type": "Manual",
      "sender_address_manual": {"line1": "...", "line2": "...", "city": "...", "state": "NY", "zip": "..."},
      "recipient_name": "...",
@@ -369,7 +371,7 @@ When SPT token is already approved (e.g., from prior spend-request) and user isn
 
 7. **Verify**: `GET https://postalform.com/api/machine/mpp/orders/:id`
 
-This flow was validated 2026-05-11 with `spt_example123456789` — 233KB JPEG-compressed PDF, 4x6 postcard, $2.00, paid in ~60s end-to-end with no user interaction.
+This flow was validated 2026-05-11 with an SPT token — 233KB JPEG-compressed PDF, 4x6 postcard, $2.00, paid in ~60s end-to-end with no user interaction.
 
 ### Path B: MCP create_order_draft (BROKEN — DO NOT USE)
 
@@ -398,7 +400,7 @@ After generating the card preview, ALWAYS run `vision_analyze` on the output to 
 - Text is readable against background
 - Layout looks intentional, not broken
 
-**Never show the user output you haven't reviewed yourself.** the user will call out unreviewed slop.
+**Never show the user output you haven't reviewed yourself.** The user will call out unreviewed slop.
 
 ## Rate Limiting & Batch Orders (CRITICAL)
 
@@ -426,7 +428,7 @@ Upload tokens are consumed on order creation even if the order fails (402, 422, 
 1. **Page size mismatch.** Always download template first. Wrong dimensions = printing issues.
 ... (existing pitfalls)
 20. **Bare SPT token rejected.** ...
-21. **Timezone reporting.** the user is ET (NYC). Cron schedules are in UTC — always convert to ET before reporting times. Never report UTC times as if they're local. When the user corrects a time, it erodes trust.
+21. **Timezone reporting.** The user is ET (NYC). Cron schedules are in UTC — always convert to ET before reporting times. Never report UTC times as if they're local. When the user corrects a time, it erodes trust.
 2. **DO NOT use `object-fit: cover` for family photos.** `cover` crops edges to fill the frame, cutting people off. Use `object-fit: contain` to show the full image — all people must be visible. Only use `cover` for abstract backgrounds.
 3. **Overlay covering faces.** Always run `vision_analyze` on the artwork to find safe zones before placing text. The natural empty space is often at the top (sky) — not the right side if someone is taking a selfie there. Multiple rounds of moving overlay = avoidable with upfront analysis.
 4. **Photo rotation for landscape cards.** Portrait photos on landscape cards leave white space. Rotating 90° fills the card but puts people sideways — visually jarring for standing/full-body shots. However, for close-up face portraits, rotation can look intentional (dynamic tilted perspective). Follow user preference — if they request rotation to fill space, do it, but pre-rotate via PIL (`img.rotate(-90, expand=True)`) rather than CSS transform. Always vision-review rotated cards before showing the user, and flag the sideways orientation.
@@ -440,11 +442,11 @@ Upload tokens are consumed on order creation even if the order fails (402, 422, 
 12. **MCP uses SSE transport.** Requires `Accept: application/json, text/event-stream` header and a session ID from the `mcp-session-id` response header. Send session ID in subsequent requests.
 13. **Address fields must be objects, not JSON strings.** MCP tools expect `sender_address_manual` and `recipient_address_manual` as native objects, not stringified JSON.
 14. **Validate before submitting.** Always call `/validate` first to catch errors without creating an order. Check for missing fields like `sender_name`, `recipient_name`, `buyer_email`, and UUID-format `request_id`.
-15. **Stripe SPT uses Link CLI, NOT raw Stripe API.** The MPP Stripe challenge provides `networkId` and `paymentMethodTypes: ["card", "link"]`. Do NOT try to find PostalForm's `pk_live_` key — the autonomous payment path uses `@stripe/link-cli` (already installed and authenticated with the user's Link account). Use `link-cli mpp decode` to extract the challenge, create an SPT spend-request, get user approval, then `link-cli mpp pay` to generate the `Authorization: Payment` header. See `references/payment-flows.md` for the full flow.
+15. **Stripe SPT uses Link CLI, NOT raw Stripe API.** The MPP Stripe challenge provides `networkId` and `paymentMethodTypes: ["card", "link"]`. Do NOT try to find PostalForm's Stripe publishable key — the autonomous payment path uses `@stripe/link-cli` (already installed and authenticated with the user's Link account). Use `link-cli mpp decode` to extract the challenge, create an SPT spend-request, get user approval, then `link-cli mpp pay` to generate the `Authorization: Payment` header. See `references/payment-flows.md` for the full flow.
 16. **Rate limiting on unpaid orders.** PostalForm rate-limits after 3-4 unpaid order attempts from the same IP within ~60 seconds. If you hit "Too many unpaid order attempts," fall back to Path C (website manual checkout) or wait 1 hour. Generate fresh request_ids for each attempt — don't reuse across protocols. See `references/batch-orders.md` for cron retry pattern.
 17. **PDF as data URL must be a string.** The `pdf` field in the machine API expects `"data:application/pdf;base64,..."` as a string value, NOT `{"data": "..."}` as an object. Getting this wrong gives confusing "not a valid PDF" errors.
 18. **Path C always works.** When all API/MPP/MCP paths are blocked, user can manually complete checkout at [postalform.com/postcards](https://postalform.com/postcards) — upload the PDF, fill addresses, pay with Link/card. This is the reliable fallback.
-19. **Original photos may have pre-existing text.** When using original photos (no Ghibli art), check each photo for existing text overlays, captions, or meme text. The user may have shared an already-edited photo from Google Photos. Your added text must not clash with or cover the pre-existing text. If the original already has prominent text (e.g., "LET THAT SHIT GO"), place your "<3" below it in the safe zone bar.
+19. **Original photos may have pre-existing text.** When using original photos (no Ghibli art), check each photo for existing text overlays, captions, or meme text. The user may have shared an already-edited photo from Google Photos. Your added text must not clash with or cover the pre-existing text. If the original already has prominent text (e.g., "LET THAT SHIT GO"), place your "<3 — Karan" below it in the safe zone bar.
 20. **Unicode emoji render as garbage in PDFs.** WeasyPrint/PostalForm fonts don't include emoji glyphs — 🫶 becomes "ḍŸ«¶", ❤️ becomes random characters. Use ASCII alternatives: `<3` for hearts, `—` for dashes, HTML entities (`&lt;3`, `&mdash;`) in HTML source. Never use raw Unicode emoji in card text.
 21. **ARG_MAX breaks link-cli with large payloads.** Shell argument list limit (~2MB on Linux) prevents passing base64 PDF data through `link-cli mpp pay --data`. Use the mppx workaround: serialize the credential with `mppx` Node.js library, then send via `curl -d @file` with the `Authorization` header. See `references/mppx-credential-guide.md`.
 22. **Bare SPT token rejected.** PostalForm requires the full serialized MPP credential (`Credential.serialize(...)`), not a raw `spt_...` string. The credential must include the original challenge that was answered.
@@ -478,7 +480,7 @@ Upload tokens are consumed on order creation even if the order fails (402, 422, 
     Same applies for image data URLs passed to OpenRouter image-gen models.
 
 33. **MPP endpoint field names differ from validate endpoint and intuition.** Common mistakes on first attempt:
-    - ❌ `"buyer": "user@example.com"` → ✓ `"buyer_name": "Jane Doe"` + `"buyer_email": "user@example.com"` (two separate fields)
+    - ❌ `"buyer": "{{PII_KARAN_EMAIL}}"` → ✓ `"buyer_name": "{{PII_KARAN_NAME}}"` + `"buyer_email": "{{PII_KARAN_EMAIL}}"` (two separate fields)
     - ❌ `"sender_address_line1": "..."` (flat) → ✓ nested object: `"sender_address_type": "Manual"` + `"sender_address_manual": {"line1": "...", "line2": "...", "city": "...", "state": "NY", "zip": "..."}`
     - ❌ `"size": "4x6"` → ✓ `"postcard_size": "4x6"` + `"mailpiece_type": "postcard"`
     The validate endpoint's schema matches MPP — use it to verify your payload before submitting.

@@ -7,7 +7,7 @@ Raw API call transcripts from the Mother's Day card session (May 7, 2026).
 ```bash
 curl -s "https://postalform.com/api/machine/orders/validate" \
   -H "Content-Type: application/json" \
-  -d '{"request_id":"<UUID>","buyer_name":"Jane Doe","buyer_email":"user@example.com","mailpiece_type":"postcard","postcard_size":"6x9","pdf":"data:application/pdf;base64,...","sender_name":"Jane Doe","sender_address_type":"Manual","sender_address_manual":{"line1":"123 Main St","line2":"Apt 1A","city":"Anytown","state":"ST","zip":"12345"},"recipient_name":"Jane Smith","recipient_address_type":"Manual","recipient_address_manual":{"line1":"456 Oak Ave","city":"Springfield","state":"ST","zip":"67890"}}'
+  -d '{"request_id":"<UUID>","buyer_name":"{{PII_KARAN_NAME}}","buyer_email":"{{PII_KARAN_EMAIL}}","mailpiece_type":"postcard","postcard_size":"6x9","pdf":"data:application/pdf;base64,...","sender_name":"{{PII_KARAN_NAME}}","sender_address_type":"Manual","sender_address_manual":{"line1":"{{PII_KARAN_STREET}}","line2":"{{PII_KARAN_APT}}","city":"{{PII_KARAN_CITY}}","state":"{{PII_KARAN_STATE}}","zip":"{{PII_KARAN_ZIP}}"},"recipient_name":"{{PII_MOM_NAME}}","recipient_address_type":"Manual","recipient_address_manual":{"line1":"{{PII_MOM_STREET}}","city":"{{PII_MOM_CITY}}","state":"{{PII_MOM_STATE}}","zip":"{{PII_MOM_ZIP}}"}}'
 ```
 
 Success response:
@@ -52,8 +52,8 @@ The Stripe challenge (base64-decoded):
   "externalId": "<order_id>",
   "methodDetails": {
     "metadata": {
-      "buyer_email": "user@example.com",
-      "buyer_name": "Jane Doe",
+      "buyer_email": "{{PII_KARAN_EMAIL}}",
+      "buyer_name": "{{PII_KARAN_NAME}}",
       "machine_method": "stripe_spt",
       "machine_protocol": "mpp",
       "mailpiece_type": "postcard",

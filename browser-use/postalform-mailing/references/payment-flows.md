@@ -17,7 +17,7 @@ PostalForm MPP order (402)
 
 ### Why Not Direct Stripe API
 
-PostalForm's Stripe publishable key is NOT accessible from their source (dynamically loaded from js.stripe.com). The Link CLI (`@stripe/link-cli`) handles the full SPT lifecycle without needing the merchant's Stripe key. Do NOT try to hunt for `pk_live_` in PostalForm's JS bundles — use the Link CLI path exclusively.
+PostalForm's Stripe publishable key is NOT accessible from their source (dynamically loaded from js.stripe.com). The Link CLI (`@stripe/link-cli`) handles the full SPT lifecycle without needing the merchant's Stripe key. Do NOT try to hunt for PostalForm's Stripe publishable key — use the Link CLI path exclusively.
 
 ### Flow Details
 
@@ -27,17 +27,17 @@ Always use `upload_token` for the PDF — never inline base64 in the MPP order. 
 ```json
 {
   "request_id": "<UUID>",
-  "buyer_name": "Jane Doe",
-  "buyer_email": "user@example.com",
+  "buyer_name": "{{PII_KARAN_NAME}}",
+  "buyer_email": "{{PII_KARAN_EMAIL}}",
   "mailpiece_type": "postcard",
   "postcard_size": "6x9",
   "pdf": {"upload_token": "pfu_..."},
-  "sender_name": "Jane Doe",
+  "sender_name": "{{PII_KARAN_NAME}}",
   "sender_address_type": "Manual",
-  "sender_address_manual": {"line1": "123 Main St", "line2": "Apt 1A", "city": "Anytown", "state": "ST", "zip": "12345"},
-  "recipient_name": "Jane Smith",
+  "sender_address_manual": {"line1": "{{PII_KARAN_STREET}}", "line2": "{{PII_KARAN_APT}}", "city": "{{PII_KARAN_CITY}}", "state": "{{PII_KARAN_STATE}}", "zip": "{{PII_KARAN_ZIP}}"},
+  "recipient_name": "{{PII_MOM_NAME}}",
   "recipient_address_type": "Manual",
-  "recipient_address_manual": {"line1": "456 Oak Ave", "city": "Springfield", "state": "ST", "zip": "67890"}
+  "recipient_address_manual": {"line1": "{{PII_MOM_STREET}}", "city": "{{PII_MOM_CITY}}", "state": "{{PII_MOM_STATE}}", "zip": "{{PII_MOM_ZIP}}"}
 }
 ```
 
@@ -61,7 +61,7 @@ Returns: `id`, `realm`, `method`, `intent`, `network_id`, `request_json` (contai
 
 ```bash
 npx -y @stripe/link-cli spend-request create \
-  --paymentMethodId "pm_visa_xxxxxxxxxxxx" \
+  --paymentMethodId "{{PII_LINK_PM_ID}}" \
   --credentialType shared_payment_token \
   --networkId "<network_id_from_decode>" \
   --amount <amount_in_cents> \
@@ -101,15 +101,15 @@ curl -s "https://postalform.com/api/machine/mpp/orders/<order_id>"
 
 Look for `status: "payment_settled"` and `is_paid: true`.
 
-### the user's Payment Methods
+### Payment Methods
 
 | ID | Type | Name | Last4 |
 |----|------|------|-------|
-| `pm_visa_xxxxxxxxxxxx` | CARD | Visa Credit | 1234 |
-| `pm_mc_xxxxxxxxxxxx` | CARD | Bilt World Elite Mastercard | 5678 |
-| `pm_alaska_xxxxxxxxxxxx` | CARD | Alaska Airlines | 0000 |
+| `{{PII_LINK_PM_ID}}` | CARD | Visa Credit | {{PII_CARD_LAST4}} |
+| `{{PII_ALT_PM_ID_1}}` | CARD | Bilt World Elite Mastercard | {{PII_ALT_LAST4_1}} |
+| `{{PII_ALT_PM_ID_2}}` | CARD | Alaska Airlines | {{PII_ALT_LAST4_2}} |
 
-## the user's Payment Methods
+## Payment Methods
 ...
 ### Troubleshooting
 

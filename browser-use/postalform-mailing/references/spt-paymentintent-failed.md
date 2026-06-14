@@ -2,7 +2,7 @@
 
 ## Context
 
-2026-05-11 cron job: Abhinav postcard using pre-approved SPT `spt_example123456789`.
+2026-05-11 cron job: Abhinav postcard using pre-approved SPT token.
 Base64 payload (291KB JPEG-compressed PDF), 4x6 postcard, $2.00.
 
 ## Flow

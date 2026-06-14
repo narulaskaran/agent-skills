@@ -9,6 +9,8 @@ autobrowse_version: 1
 
 Alternative checkout path when PostalForm's machine API (`/api/machine/mpp/orders`) is rate-limited. Uses browser automation to complete checkout at [postalform.com/postcards](https://postalform.com/postcards).
 
+⚠️ **PII:** Names, emails, and addresses use `{{PII_*}}` placeholders. Load `~/.hermes/memory/pii.json` and replace placeholders before executing.
+
 ## When To Use This Path
 
 | Condition | Use |
@@ -101,15 +103,13 @@ Expected form fields:
 - **Sender**: Name, Address Line 1, Address Line 2, City, State, ZIP
 - **Recipient**: Name, Address Line 1, Address Line 2, City, State, ZIP
 
-Default addresses (from memory):
+Default addresses — load from `~/.hermes/memory/pii.json`:
 ```
-Jane Doe (sender)
-123 Main St, Apt 1A
-Anytown, ST 12345
+{{PII_KARAN_NAME}} (sender)
+{{PII_KARAN_ADDRESS}}
 
-Jane Smith (recipient)
-456 Oak Ave
-Springfield, ST 67890
+{{PII_MOM_NAME}} (recipient)
+{{PII_MOM_ADDRESS}}
 ```
 
 **Strategy optimization**: Fill all fields in one pass using `browser_type` for each input. Avoid re-snapshotting between fields.
@@ -123,7 +123,7 @@ PostalForm uses Stripe for payments. Expected flow:
 4. Confirm payment
 
 **Strategy optimization**: 
-- If Stripe Link is supported, use `user@example.com` — Link remembers saved cards
+- If Stripe Link is supported, use `{{PII_KARAN_EMAIL}}` — Link remembers saved cards
 - If not, use Link CLI virtual card: create spend-request → get virtual card details → type into Stripe fields
 - For PCI iframes, use real keystroke simulation (not `.value` assignment)
 

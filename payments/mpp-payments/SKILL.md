@@ -8,6 +8,8 @@ version: 1.0.0
 
 Hard-won patterns for autonomous agent payments via the Machine Payment Protocol (x402/MPP).
 
+⚠️ **PII:** Payment method IDs use `{{PII_*}}` placeholders. Load `~/.hermes/memory/pii.json` and replace before executing.
+
 MPP supports multiple payment **methods** — the `www-authenticate` header's `method` field tells you which one. The two methods encountered so far:
 
 | Method | Payment Rail | Tooling | Auth Model |
@@ -97,7 +99,7 @@ If the merchant supports both upload tokens and base64 data URLs for file upload
 ### Spend-Request Creation
 ```bash
 npx -y @stripe/link-cli spend-request create \
-  --paymentMethodId pm_visa_xxxxxxxxxxxx \
+  --paymentMethodId {{PII_LINK_PM_ID}} \
   --credentialType shared_payment_token \
   --networkId <network_id> \
   --amount <cents> --currency usd \
@@ -159,13 +161,13 @@ curl -s -H "Authorization: $AUTH" -d @payload.json <endpoint>
 
 ## Payment Method Reference
 
-the user's Link payment methods (use `--paymentMethodId` to override default Visa):
+User's Link payment methods (use `--paymentMethodId` to override default Visa):
 
 | ID | Type | Name | Last4 |
 |----|------|------|-------|
-| `pm_visa_xxxxxxxxxxxx` | CARD | Visa Credit | 1234 (default) |
-| `pm_mc_xxxxxxxxxxxx` | CARD | Bilt World Elite Mastercard | 5678 |
-| `pm_alaska_xxxxxxxxxxxx` | CARD | Alaska Airlines | 0000 |
+| `{{PII_LINK_PM_ID}}` | CARD | Visa Credit | {{PII_CARD_LAST4}} (default) |
+| `{{PII_ALT_PM_ID_1}}` | CARD | Bilt World Elite Mastercard | {{PII_ALT_LAST4_1}} |
+| `{{PII_ALT_PM_ID_2}}` | CARD | Alaska Airlines | {{PII_ALT_LAST4_2}} |
 
 ## Verification
 
