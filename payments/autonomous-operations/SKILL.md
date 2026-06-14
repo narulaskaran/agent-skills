@@ -70,7 +70,7 @@ When the user wants to buy something that's not yet available (site overloaded, 
 
 ### Critical details
 - **State detection via DOM snapshot**, not regex/curl — many SPAs render differently to raw HTTP requests
-- **Deliver to origin** means the cron's output arrives in the same thread/the user's DM where the task was originally discussed
+- **Deliver to origin** means the cron's output arrives in the same thread/Karan's DM where the task was originally discussed
 - If the page is heavily dynamic (JS-rendered), include a `browser_navigate` + `browser_snapshot full=true` step in the cron prompt rather than relying on `web_extract`
 
 ## 📧 Programmatic Communication (AgentMail)
@@ -141,7 +141,7 @@ Local browser is **free**. Browserbase is only needed for anti-bot sites (Steam,
 
 ### 🔁 Self-Improvement (Autobrowse Loop)
 
-**Browser tasks self-improve automatically.** Every time you use browser tools and something goes wrong or is inefficient, you trigger the autobrowse improvement loop. Do NOT wait for the user to ask.
+**Browser tasks self-improve automatically.** Every time you use browser tools and something goes wrong or is inefficient, you trigger the autobrowse improvement loop. Do NOT wait for Karan to ask.
 
 **Trigger conditions** (any of):
 - Browser task uses >10 snapshots (target: ≤5)
@@ -157,7 +157,7 @@ Local browser is **free**. Browserbase is only needed for anti-bot sites (Steam,
 5. Judge: pass/progress → keep; regression → revert, try different hypothesis
 6. Repeat until 2+ clean passes then graduate: `skill_manage create` → push to `narulaskaran/agent-skills`
 
-**Default behavior, not opt-in.** Browser inefficiency → autobrowse. the user should never have to say "improve this." Just do it.
+**Default behavior, not opt-in.** Browser inefficiency → autobrowse. Karan should never have to say "improve this." Just do it.
 
 ## 📦 Skill Publishing (Agent Skills Repo)
 
@@ -169,7 +169,7 @@ When a new skill is created or updated, publish it to the public `narulaskaran/a
 When checking for upcoming trips (e.g., via wanderlog-monitor cron or proactively):
 1. **Scan Google Calendar** — look for flights (LGA→CHS style format), multi-day events, birthday/anniversary events
 2. **Wanderlog direct access** — `browser_navigate` to wanderlog.com requires OAuth login (Google/Apple/Facebook). No stored credentials exist; skip if unauthenticated.
-3. **Search AgentMail inbox** for travel signals — Wanderlog invites come from `no-reply@wanderlog.com` with subject "XYZ invited you to view..." containing the trip name in quotes. Also search for hotel confirmations, flight receipts.
+3. **Search AgentMail inbox** for travel signals — Wanderlog invites come from their notification address with subject "XYZ invited you to view..." containing the trip name in quotes. Also search for hotel confirmations, flight receipts.
 4. **Cross-reference** calendar events with email confirmations to build the trip picture (dates, destinations, purpose)
 5. **If within 2-week window**, surface prep tasks and queue them
 
@@ -183,7 +183,7 @@ When a trip is confirmed within 2 weeks, queue `travel_prep` type tasks:
 
 ### Tool-Specific Notes
 - **gcal.py** only supports `events` and `list` subcommands — **no `create`**. Calendar blocks for travel prep must be created via Google Calendar API directly (or a script that extends the API). Attempting `gcal.py create` returns "Unknown command: create".
-- **ICS invite pattern**: When GCal write access is unavailable (or the user prefers email-based invites), generate `.ics` files and email them as attachments. See `references/ics-calendar-invites.md` for the template and AgentMail workflow.
+- **ICS invite pattern**: When GCal write access is unavailable (or Karan prefers email-based invites), generate `.ics` files and email them as attachments. See `references/ics-calendar-invites.md` for the template and AgentMail workflow.
 - **AgentMail SDK**: Fetching individual messages uses `am.inboxes.messages(inbox_id)` (not `.message()`). The `.inboxes` attribute (not `.inbox`). Use `dir(am)` on the AgentMail client object to discover the correct API surface.
 - **Wanderlog access**: No credentials or cookies stored. The trip name and details come through invite emails to the AgentMail inbox.
 
@@ -194,13 +194,13 @@ When the task is to sign up for an external API service (DeepSeek, new LLM provi
 
 1. **Browser signup flow**:
    - Navigate to the service's signup page (often a `/sign_in` URL with a "Sign up" link)
-   - Fill in the agent's own email (AgentMail inbox, e.g. `agent@example.com`)
+   - Fill in the agent's own email (AgentMail inbox, e.g. `{{PII_AGENTMAIL_ADDRESS}}`)
    - Generate a secure password and store it for reference
    - Click "Send code" or the verification trigger
    - **Verify the button changed state** (e.g. "Send code" → "Resend after 52s") to confirm the email was actually sent — the page may show no visual confirmation otherwise
 
 2. **Read verification code from AgentMail inbox**:
-   - First list messages: `export AGENTMAIL_API_KEY=$(cred get AGENTMAIL_API_KEY) && python3 scripts/check_inbox.py --inbox agent@example.com`
+   - First list messages: `export AGENTMAIL_API_KEY=$(cred get AGENTMAIL_API_KEY) && python3 scripts/check_inbox.py --inbox {{PII_AGENTMAIL_ADDRESS}}`
    - Find the verification email (it's usually the newest message from the service)
    - Extract the message ID (the first field of each entry, in angle brackets)
    - Read the email content using the Python SDK (not shell-quoted inline python — write a temp script file instead, see the reference file)
@@ -284,7 +284,7 @@ if <actual_command> 2>"$ERRFILE"; then
 fi
 
 ERROR_SUMMARY=$(tail -5 "$ERRFILE" | tr '\n' ' | ' | sed 's/[^[:print:]]//g' | cut -c1-400)
-hermes -z "Cron '<job_name>' (job <job_id>) failed: $ERROR_SUMMARY. Investigate root cause, fix if you can. Only notify the user if unfixable." \
+hermes -z "Cron '<job_name>' (job <job_id>) failed: $ERROR_SUMMARY. Investigate root cause, fix if you can. Only notify Karan if unfixable." \
     --accept-hooks 2>/dev/null &
 exit 0
 ```
@@ -304,17 +304,23 @@ The `no_agent=true` cron runner executes `.sh`/`.bash` extensions via bash, **ev
 
 **Symptom**: Cron failure shows Python syntax error on JavaScript code. Not a script bug — wrong interpreter.
 
+### Anti-Pattern: Waiting for User to Flag Cron Failures
+
+**When you receive a cron failure notification (like the Telegram delivery of a failed run), act immediately.** Diagnose the root cause, fix if you can, verify with a manual run. Do NOT wait for the user to say "did you fix?" or "what happened?" — by the time they ask, the fix window is already late. The failure notification IS the trigger to act.
+
+**Pattern**: Failure delivered → investigate immediately (check script, run manually, verify state files, check logs) → fix or report. Only escalate to user if unfixable (creds, API keys, subscription, external dependency).
+
 ### Anti-Pattern: Watchdog Polling
 
 Do NOT create a separate cron that periodically scans for failures. It burns tokens checking healthy jobs, adds latency (up to polling interval), and creates its own failure surface. Push-based (`hermes -z` from wrapper) is strictly better: zero added cost on success, instant on failure.
 
 ### Cron Job Output Quality — Delivery Anti-Patterns
 
-**The "Done. Saved." anti-pattern**: When a cron job has `deliver: telegram`, the agent's final reply IS what the user sees. If the prompt says "save to file" + "done", the user gets "Done. Saved to file." — not the actual content. The file is invisible to him.
+**The "Done. Saved." anti-pattern**: When a cron job has `deliver: telegram`, the agent's final reply IS what Karan sees. If the prompt says "save to file" + "done", Karan gets "Done. Saved to file." — not the actual content. The file is invisible to him.
 
-**Fix**: The prompt must explicitly say: "YOUR FINAL REPLY IS THE BRIEFING. the user sees ONLY your final reply. Do NOT say 'done' or 'saved to file.'"
+**Fix**: The prompt must explicitly say: "YOUR FINAL REPLY IS THE BRIEFING. Karan sees ONLY your final reply. Do NOT say 'done' or 'saved to file.'"
 
-**The preamble leakage anti-pattern**: Agent adds internal status notes ("Thread not found", "Ready to assemble briefing", "No new messages — here you go") BEFORE the actual briefing. These leak into the delivered Telegram message as noise. the user doesn't need to know the agent checked AgentMail and found nothing — he just needs the briefing.
+**The preamble leakage anti-pattern**: Agent adds internal status notes ("Thread not found", "Ready to assemble briefing", "No new messages — here you go") BEFORE the actual briefing. These leak into the delivered Telegram message as noise. Karan doesn't need to know the agent checked AgentMail and found nothing — he just needs the briefing.
 
 **Fix**: Prompt must say: "CRITICAL: No preamble. No status notes like 'Thread not found' or 'Ready to assemble.' No 'AgentMail: quiet' as a separate section header. Your final reply IS the briefing — start directly with the date header. If AgentMail has results, fold them into the briefing body. If nothing, don't mention it at all."
 
@@ -322,13 +328,13 @@ Do NOT create a separate cron that periodically scans for failures. It burns tok
 
 **Workaround**: Keep cron-delivered briefings under 800 chars. Drop internal notes, status lines, and file-write confirmations from the final response — they waste bytes and trigger the anti-patterns above. Verify completeness in the output file (`~/.hermes/cron/output/<job_id>/`) if truncation is suspected.
 
-**File writes are internal plumbing**: Only write intermediate files if they're consumed by a subsequent step (e.g., next day's scan reading prior scans). If nothing reads the file, skip it — deliver directly. the user shouldn't have to ask "what's in the file?" — the content should already be in his Telegram.
+**File writes are internal plumbing**: Only write intermediate files if they're consumed by a subsequent step (e.g., next day's scan reading prior scans). If nothing reads the file, skip it — deliver directly. Karan shouldn't have to ask "what's in the file?" — the content should already be in his Telegram.
 
 **Missing `enabled_toolsets`**: Cron jobs with no `enabled_toolsets` have NO tools — not even `memory`. This causes silent failures where the agent falls back to file writes and delivers a hollow "Done" message. Always set `enabled_toolsets` explicitly to include everything the job needs (terminal, file, web, search, skills, session_search, memory, kanban).
 
 **Content filtering — memory tool DOES NOT WORK in cron**: The `memory` tool is systematically unavailable in cron environments. Root cause: `cron/scheduler.py` line 1452 hardcodes `skip_memory=True` for ALL cron jobs (`# Cron system prompts would corrupt user representations`). Memory content is never injected into the system prompt AND the memory tool itself refuses to operate.
 
-**DO NOT use hardcoded suppression lists in cron prompts.** That's brittle, doesn't scale, and requires editing the prompt every time the user corrects something. the user will rightfully call this a hack.
+**DO NOT use hardcoded suppression lists in cron prompts.** That's brittle, doesn't scale, and requires editing the prompt every time the user corrects something. Karan will rightfully call this a hack.
 
 **Instead, read memory files directly via `read_file`.** Memory is stored as plain markdown at:
 - `~/.hermes/memories/MEMORY.md` — agent's notes (cancellations, preferences, conventions)
@@ -342,7 +348,7 @@ against them. If memory says cancelled/NOT happening — omit entirely, no matte
 prior scans or session_search surface.
 ```
 
-This is self-healing: when the user tells you "X is cancelled" → you save to memory → next cron run reads the updated file → suppression happens automatically. No prompt edits needed.
+This is self-healing: when Karan tells you "X is cancelled" → you save to memory → next cron run reads the updated file → suppression happens automatically. No prompt edits needed.
 
 See `references/cron-memory-workaround.md` for the full root cause (scheduler.py line 1452), file paths, and verification steps.
 
@@ -353,12 +359,12 @@ See `references/cron-memory-workaround.md` for the full root cause (scheduler.py
 When starting a new session (whether user-initiated or cron), immediately check for pending work before waiting to be asked:
 
 1. **Check Kanban board**: `hermes kanban list` — any tasks in `ready` or age >5 min? These are tasks the dispatcher may have missed. Process them directly.
-2. **Check AgentMail inbox directly** — don't rely on Kanban board alone. Load `email-monitor` skill for the correct access pattern: extract API key from system crontab (`crontab -l | grep -oP 'AGENTMAIL_API_KEY="\K[^"]+'`) then curl the API directly (`curl -s -H "Authorization: Bearer $KEY" "https://api.agentmail.to/v0/inboxes/agent@example.com/threads?limit=20&unread=true"`). The `agentmail` skill's Python SDK reference has a hardcoded key that may be stale — prefer curl. Search for unread threads from `user@example.com` specifically.
+2. **Check AgentMail inbox directly** — don't rely on Kanban board alone. Load `email-monitor` skill for the correct access pattern: extract API key from system crontab (`crontab -l | grep -oP 'AGENTMAIL_API_KEY="\K[^"]+'`) then curl the API directly (`curl -s -H "Authorization: Bearer $KEY" "https://api.agentmail.to/v0/inboxes/{{PII_AGENTMAIL_ADDRESS}}/threads?limit=20&unread=true"`). The `agentmail` skill's Python SDK reference has a hardcoded key that may be stale — prefer curl. Search for unread threads from `{{PII_KARAN_EMAIL}}` specifically.
 3. **Check Kanban for unprocessed email tasks**: `hermes kanban list` and grep for "Email:" prefix. These are high-value because the user likely expects auto-processing.
 4. **Act immediately**: If pending tasks exist or unread emails found, process them without waiting. Don't report "found X pending tasks" — just do the work and report results.
 
 ### Why This Matters
-The email-to-Kanban pipeline (email_monitor.py → Kanban task → dispatcher → worker) can break silently between task creation and worker execution. Additionally, the monitor's state file may already have fingerprints for threads that the user later replied to — making them appear as "unread" in AgentMail but invisible to the monitor (fingerprint unchanged because the monitor processed the original, not the reply). Direct inbox checking catches both failure modes. When the user says "why didn't you auto-ingest this?", the root cause is almost always a dispatcher gap or a state-fingerprint blind spot.
+The email-to-Kanban pipeline (email_monitor.py → Kanban task → dispatcher → worker) can break silently between task creation and worker execution. Additionally, the monitor's state file may already have fingerprints for threads that Karan later replied to — making them appear as "unread" in AgentMail but invisible to the monitor (fingerprint unchanged because the monitor processed the original, not the reply). Direct inbox checking catches both failure modes. When the user says "why didn't you auto-ingest this?", the root cause is almost always a dispatcher gap or a state-fingerprint blind spot.
 
 ## 🧠 Token Budget & Cost Management
 

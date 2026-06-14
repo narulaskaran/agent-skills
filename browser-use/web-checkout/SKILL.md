@@ -79,7 +79,7 @@ Each snapshot = ~1000+ tokens. A 20-snapshot flow = 20K tokens wasted.
 - Stripe PCI fields are in cross-origin iframes
 - `.value` assignment is ignored — must use real keystroke simulation
 - `browser_cdp Input.insertText` for iframe input
-- Stripe Link (`user@example.com`) may pre-fill payment details
+- Stripe Link (`{{PII_KARAN_EMAIL}}`) may pre-fill payment details
 
 ### CAPTCHA / Turnstile
 - May require Browserbase proxy (residential IP)
