@@ -46,8 +46,8 @@ PostalForm triggers 429 after **3-4 unpaid MPP orders within ~60 seconds**. The 
 ### Context field minimum length
 The `--context` parameter in `spend-request create` must be **>=100 characters**. Shorter contexts return `VALIDATION_ERROR: "Too small: expected string to have >=100 characters"`.
 
-Example failure: `"Abhinav postcard"` (19 chars) → ❌
-Example success: `"PostalForm 4x6 Ghibli-style postcard for Abhinav mailed to 15903 Riverton Ave Lathrop CA 95330. Part of batch of 4 Mother's Day cards for friends."` (143 chars) → ✅
+Example failure: `"<name> postcard"` (19 chars) → ❌
+Example success: `"PostalForm 4x6 Ghibli-style postcard for <name> mailed to <address>. Part of batch of 4 cards for friends."` (143 chars) → ✅
 
 ### Without --requestApproval
 Omitting `--requestApproval` still creates a spend-request in `pending_approval` status — it just doesn't send a push notification. The user must still manually approve via Link app. There is no auto-approval path.
