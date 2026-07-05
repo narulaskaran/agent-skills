@@ -228,6 +228,18 @@ Inner agent shows exactly what it saw and did. Don't rationalize failures — tr
 
 1. **Chrome sandbox**: In containers/VMs, `browser_navigate` fails with "No usable sandbox". Add `--no-sandbox` to browser config. Fallback: static analysis + session traces.
 2. **SPA navigation**: Inertia.js, React Router — wait for XHR before next action. Check `browser_console` for errors.
+3. **Native `<select>` disguised as combobox**: Some SPAs (JFK Airport, gov sites) use native `<select>` + `<option>` elements but the accessibility tree reports them as `combobox` + `option`. When `browser_click` on an option fails with CDP errors or does nothing, fall back to `browser_console`:
+   ```js
+   (() => {
+     const option = document.evaluate("//option[text()='<target text>']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+     if (!option) return 'not found';
+     const select = option.parentElement;
+     select.value = option.value;
+     select.dispatchEvent(new Event('change', {bubbles: true}));
+     return 'set to ' + option.value;
+   })()
+   ```
+   Then wait for the page to re-render with a fresh `browser_snapshot`. Verify the combobox label updated before proceeding.
 3. **CAPTCHA/Turnstile**: May require Browserbase proxy. Document in strategy.
 4. **Session contamination**: Previous `delegate_task` leaves cookies/state. Start fresh sessions.
 5. **Selector volatility**: CSS classes change between loads. Prefer `name`, `data-*`, `aria-label`.
