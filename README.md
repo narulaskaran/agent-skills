@@ -37,6 +37,12 @@ Opinionated, skills for AI agents which I've developed over time from my own Her
 |-------|-------------|
 | [food-tracking](health/food-tracking/SKILL.md) | Track daily food intake with calories, protein, and fiber. Supports photo-based and text-based entries, restaurant menu research, and health troubleshooting. |
 
+### DevOps
+
+| Skill | What it does |
+|-------|-------------|
+| [skill-sync](devops/skill-sync/SKILL.md) | Deterministic local/repository skill audit with explicit copy selection, branch protection, PII checks, and verified PR flow. |
+
 ## How skills are made
 
 These come from real sessions where either an agent tried to do something, failed, iterated, and eventually identified a reliable path, or where I requested and fine tuned a workflow for my own usage.
