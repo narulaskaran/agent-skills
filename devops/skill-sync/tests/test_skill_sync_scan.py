@@ -59,3 +59,20 @@ def test_ambiguous_local_names_are_never_auto_actionable(tmp_path):
     assert report["counts"]["ambiguous_local"] == 1
     assert report["action_required"] is True
     assert report["skills"][0]["status"] == "ambiguous_local"
+
+
+def test_audit_flags_public_hygiene_risks(tmp_path):
+    repo = tmp_path / "repo"
+    local = tmp_path / "local"
+    make_skill(repo, "devops", "risky", "Karan uses /opt/data and qwen3.5:4b")
+    make_skill(local, "devops", "risky", "generic")
+
+    report = scan(repo, [local])
+    item = report["skills"][0]
+    assert item["audit_flags"] == ["local_path", "personal_name", "retired_model"]
+    assert item["local_audit_flags"] == []
+    assert report["audit_counts"] == {
+        "personal_name": 1,
+        "local_path": 1,
+        "retired_model": 1,
+    }

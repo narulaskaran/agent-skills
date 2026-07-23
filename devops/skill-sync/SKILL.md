@@ -23,7 +23,7 @@ python3 devops/skill-sync/scripts/skill_sync_scan.py \
   --output /tmp/skill-sync-report.json
 ```
 
-The scanner discovers every `SKILL.md`, ignores `.git/` and `.archive/`, compares content with SHA-256, and emits stable JSON. It reports `in_sync`, `diverged`, `repo_only`, `local_only`, and `ambiguous_local`. Only `diverged` and approved `local_only` entries are copy candidates. `repo_only` entries require review. `ambiguous_local` entries are never auto-copied.
+The scanner discovers every `SKILL.md`, ignores `.git/` and `.archive/`, compares content with SHA-256, and emits stable JSON. It reports `in_sync`, `diverged`, `repo_only`, `local_only`, and `ambiguous_local`. It also flags likely public-repo hygiene risks (`personal_name`, `local_path`, and retired model references) in `audit_flags` / `local_audit_flags`, with totals in `audit_counts`. Only `diverged` and approved `local_only` entries are copy candidates. `repo_only` entries require review. `ambiguous_local` entries are never auto-copied. Any audit flag keeps `action_required` true.
 
 ## Gated PR flow
 
