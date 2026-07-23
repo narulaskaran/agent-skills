@@ -165,7 +165,7 @@ Skill body structure:
 
 ```bash
 # Clone shallow
-git clone --depth 1 https://github.com/narulaskaran/agent-skills.git /tmp/agent-skills
+git clone --depth 1 https://github.com/OWNER/agent-skills.git /tmp/agent-skills
 
 # Copy skill
 cp -r ~/.hermes/skills/<category>/<skill-name> /tmp/agent-skills/<category>/
@@ -180,7 +180,7 @@ git commit -m "feat: add <skill-name> — <one-line description>"
 git push
 ```
 
-Repo structure (`narulaskaran/agent-skills`):
+Repo structure (`OWNER/agent-skills`):
 ```
 agent-skills/
 ├── README.md
