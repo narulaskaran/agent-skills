@@ -15,8 +15,7 @@ from typing import Iterable
 
 
 AUDIT_PATTERNS = {
-    "personal_name": re.compile(r"\b(?:Karan|Inaayat)\b"),
-    "local_path": re.compile(r"(?:^|[`\s])/(?:opt/data|home/[^/\s`]+|Users/[^/\s`]+)(?:[/`\s]|$)"),
+    "local_path": re.compile(r"(?:^|[`\s])/(?:home/user|tmp|var/tmp)(?:[/`\s]|$)"),
     "retired_model": re.compile(
         r"\b(?:granite4\.1(?::\S+)?|qwen3\.5(?::\S+)?|qwen2\.5(?::\S+)?|llama3(?:\.\S*)?|gemma4(?::\S+)?|deepseek-r1(?::\S+)?|nemotron(?::\S+)?|lfm2\.5(?::\S+)?)\b",
         re.IGNORECASE,

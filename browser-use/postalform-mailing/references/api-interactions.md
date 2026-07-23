@@ -13,7 +13,7 @@ curl -s "https://postalform.com/api/machine/orders/validate" \
 Success response:
 ```json
 {
-  "request_id": "bab25dc3-ea83-45ab-9d1a-0e1e2c842d28",
+  "request_id": "<REQUEST_UUID>",
   "status": "validated_new_order",
   "quote": {
     "price_usd": 2.5,

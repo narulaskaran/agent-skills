@@ -29,7 +29,7 @@ When an approved spend-request (SPT) exists but can't complete payment because t
 ### 422: Upload token already used for order
 ```
 POST with request_id="d94ac01f-..." + fresh upload_token
-→ 422: "Upload token was already used. Order: d94ac01f-9c8c-4013-a2a6-4d1dfd4e2009."
+→ 422: "Upload token was already used. Order: <ORDER_UUID>."
 ```
 
 ### 413: Base64 PDF too large

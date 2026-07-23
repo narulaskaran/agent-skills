@@ -2,7 +2,7 @@
 
 ## Context
 
-2026-05-11 cron job: Abhinav postcard using pre-approved SPT token.
+2026-05-11 cron job: Example recipient postcard using pre-approved SPT token.
 Base64 payload (291KB JPEG-compressed PDF), 4x6 postcard, $2.00.
 
 ## Flow
@@ -18,7 +18,7 @@ Base64 payload (291KB JPEG-compressed PDF), 4x6 postcard, $2.00.
   "status": 402,
   "detail": "Payment verification failed: Stripe PaymentIntent failed.",
   "challengeId": "rkS2OOJEO6--6cIbg41dIGOk0riaMtbV5Ex5r4SAmvY",
-  "order_id": "e3996d0f-879e-4a54-8c96-56124eeb8595"
+  "order_id": "<ORDER_UUID>"
 }
 ```
 
@@ -28,8 +28,8 @@ The SPT token was structurally valid (passed challenge verification — the chal
 
 ## Recovery
 
-1. Created fresh spend-request `lsrq_1TVxY2BlKzBtMJGOPY51FxO0` ($2.00)
-2. Approval URL: `https://app.link.com/activity/approve/lsrq_1TVxY2BlKzBtMJGOPY51FxO0`
+1. Created fresh spend-request `<SPEND_REQUEST_ID>` ($2.00)
+2. Approval URL: `https://app.link.com/activity/approve/<SPEND_REQUEST_ID>`
 3. After approval: replay same body → fresh 402 → serialize new SPT → retry
 
 ## Why replay works with base64
@@ -38,7 +38,7 @@ Unlike upload_token orders (where the token is consumed by the 402), base64 data
 
 ## Key artifacts
 
-- Payload: `/tmp/abhinav_payload.json` (291,673 bytes)
-- Order ID: `e3996d0f-879e-4a54-8c96-56124eeb8595`
+- Payload: `/tmp/payload.json` (291,673 bytes)
+- Order ID: `<ORDER_UUID>`
 - Original challenge: saved to `/tmp/stripe_challenge.txt`
-- Spend-request: `lsrq_1TVxY2BlKzBtMJGOPY51FxO0`
+- Spend-request: `<SPEND_REQUEST_ID>`
