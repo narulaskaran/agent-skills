@@ -155,13 +155,13 @@
 155|3. Update `~/.hermes/autobrowse/tasks/<site>/strategy.md`
 156|4. Re-run with updated strategy via `delegate_task`
 157|5. Judge: pass/progress → keep; regression → revert, try different hypothesis
-158|6. Repeat until 2+ clean passes then graduate: `skill_manage create` → push to `narulaskaran/agent-skills`
+158|6. Repeat until 2+ clean passes then graduate: `skill_manage create` → open a PR against `OWNER/agent-skills`
 159|
 160|**Default behavior, not opt-in.** Browser inefficiency → autobrowse. The user should never have to say "improve this." Just do it.
 161|
 162|## 📦 Skill Publishing (Agent Skills Repo)
 163|
-164|When a new skill is created or updated, publish it to the public `narulaskaran/agent-skills` repo for sharing, community contributions, and durable version history. See `references/agent-skills-repo.md` for the full clone → copy → push workflow.
+164|When a new skill is created or updated, publish it to the public skills repository for sharing, community contributions, and durable version history. See `references/agent-skills-repo.md` for the full clone → copy → push workflow.
 165|
 166|## 🧳 Travel Trip Monitoring & Prep
 167|

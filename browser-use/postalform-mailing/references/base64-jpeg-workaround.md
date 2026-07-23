@@ -42,10 +42,10 @@ print(f"{size:,} bytes — base64: ~{size*4//3:,} chars")
 
 | Card | PNG PDF | JPEG PDF | Reduction |
 |------|---------|----------|-----------|
-| Abhinav | 1,754 KB | 218 KB | 88% |
-| Hemil | 1,873 KB | 233 KB | 88% |
-| Siddharth | 1,634 KB | 170 KB | 90% |
-| Utkarsh | 1,675 KB | 214 KB | 87% |
+| Example recipient | 1,754 KB | 218 KB | 88% |
+| Example recipient 2 | 1,873 KB | 233 KB | 88% |
+| Example recipient 3 | 1,634 KB | 170 KB | 90% |
+| Example recipient 4 | 1,675 KB | 214 KB | 87% |
 
 Base64 of 233KB PDF ≈ 311KB chars — well under 413 limit.
 

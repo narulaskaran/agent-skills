@@ -1,68 +1,42 @@
-# Agent Skills Repo — Publishing Workflow
+# Public Skills Repository Workflow
 
-Canonical repo: `https://github.com/narulaskaran/agent-skills`
+Use a fresh clone of `https://github.com/OWNER/agent-skills.git` or an isolated worktree. Public skills must be reusable, provider-neutral where possible, and free of personal data, credentials, private paths, and payment identifiers.
 
-Structure:
-```
+## Structure
+
+```text
 agent-skills/
-├── README.md              # Autobrowse methodology, contribution guidelines
-├── ecommerce/
-│   ├── shopify-stripe-checkout/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   ├── postalform-mailing/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   └── postalform-checkout/
-│       ├── SKILL.md
-│       └── references/
-└── (future categories)
+├── README.md
+├── browser-use/
+├── payments/
+├── devops/
+└── <other categories>/
+    └── <skill>/SKILL.md
 ```
 
-## Publishing Workflow
+Each skill may include `references/`, `scripts/`, `templates/`, or `assets/` when those files are required by its workflow.
+
+## Publishing
+
+1. Fetch `origin/main` and verify repository root.
+2. Create a feature branch; never commit or push `main`/`master`.
+3. Copy only approved skill files and required supporting files.
+4. Replace names, emails, addresses, paths, IDs, tokens, and credentials with generic placeholders.
+5. Update README when adding or renaming skills.
+6. Stage all files and run the repository PII hook plus `git diff --check`.
+7. Commit and push feature branch.
+8. Open a PR and stop for human merge.
+9. Verify PR URL, branch, head SHA, changed paths, and fresh-clone contents.
 
 ```bash
-# 1. Clone shallow (repo may grow large)
-GIT_TERMINAL_PROMPT=0 git clone --depth 1 https://github.com/narulaskaran/agent-skills.git /tmp/agent-skills
-
-# 2. Copy new/updated skills
-cp -r ~/.hermes/skills/ecommerce/new-skill /tmp/agent-skills/ecommerce/
-
-# 3. Set git identity (agent runs as system user)
-git config user.email "user@example.com"
-git config user.name "Hermes Agent"
-
-# 4. Enable gh credential helper (required for HTTPS push)
-gh auth setup-git
-
-# 5. Commit
+git fetch origin main
+git checkout -b hermes/skill-<short-name>
+git rev-parse --show-toplevel
 git add -A
-git commit -m "feat: add <skill-name> — <one-line description>"
-
-# 6. Push
-git push
+.githooks/pre-commit
+git diff --cached --check
+git commit -m "skill: <concise change>"
+git push -u origin HEAD
 ```
 
-## Pitfalls
-
-- **Clone timeout**: `gh repo clone` can hang. Use `git clone --depth 1` instead.
-- **Push auth**: HTTPS remote requires `gh auth setup-git` or token-in-URL (which breaks with special chars in PAT). `gh auth setup-git` is reliable.
-- **Git identity**: System user has no git config. Set per-repo: `git config user.email` + `git config user.name`.
-- **Submodule pollution**: Always clone to `/tmp`, never inside ~/.hermes/ or workspace.
-
-## Adding Skills
-
-Each skill is a directory under the appropriate category. Must include:
-- `SKILL.md` — YAML frontmatter + markdown body
-- `references/` — any supporting docs
-
-When a skill references external docs (API specs, payment flows), include those references in the repo. They're part of the skill's knowledge base.
-
-## README Format
-
-The repo README should include:
-- What skills are (Autobrowse methodology link)
-- Table of skills with descriptions and status
-- Directory structure explanation
-- Contribution guidelines
-- License (MIT)
+Never bypass PII checks. If a check flags a legitimate example, replace it with a generic placeholder rather than weakening the check.
