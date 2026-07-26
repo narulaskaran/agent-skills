@@ -21,6 +21,20 @@ Opinionated, skills for AI agents which I've developed over time from my own Her
 | [mpp-payments](payments/mpp-payments/SKILL.md) | Machine Payment Protocol patterns. Reusable Stripe Link CLI → mppx serialization flow, credential lifecycle, 402 challenge-response authentication. | 
 | [autonomous-operations](payments/autonomous-operations/SKILL.md) | End-to-end autonomous operations: spending protocols with verification gates, email-driven task intake (AgentMail → Kanban), system health checks, calendar invite workflows, and cron bomb detection. |
 
+
+### Productivity
+
+| Skill | What it does |
+|-------|-------------|
+| [maps](productivity/maps/SKILL.md) | Geocode, POIs, routes, timezones via OpenStreetMap/OSRM. |
+| [nyc-parks-events](productivity/nyc-parks-events/SKILL.md) | Scrape NYC Parks event pages (movies, concerts, fitness) — extract embedded eventsByLocationJSON, parse structured event data, filter by borough. |
+| [petdex](productivity/petdex/SKILL.md) | Install and select animated petdex mascots for Hermes. |
+| [powerpoint](productivity/powerpoint/SKILL.md) | Create, read, edit .pptx decks, slides, notes, templates. |
+| [prd-generator](productivity/prd-generator/SKILL.md) | Generate agent-ready PRDs via structured conversation. Adapted from wwwazzz/senior-pm-prompt. |
+| [nano-pdf](productivity/nano-pdf/SKILL.md) | Edit PDF text/typos/titles via nano-pdf CLI (NL prompts). |
+| [teams-meeting-pipeline](productivity/teams-meeting-pipeline/SKILL.md) | Operate the Teams meeting summary pipeline via Hermes CLI — summarize meetings, inspect pipeline status, replay jobs, manage Microsoft Graph subscriptions. |
+| [tts-configuration](productivity/tts-configuration/SKILL.md) | Configure Hermes TTS — switch providers, tune Piper voices, set speed/length_scale, discover voices. |
+
 ### Software Development
 
 | Skill | What it does |
