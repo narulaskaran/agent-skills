@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "goal": "<what this lane must accomplish>",
+  "inputs": ["<source artifact or decision>"],
+  "constraints": ["<scope, safety, or compatibility constraint>"],
+  "artifact": "<absolute path, commit, URL, or decision record>",
+  "base_sha": "<exact revision or unknown>",
+  "checks": [
+    {"command": "<command>", "exit_code": 0, "result": "<short result>"}
+  ],
+  "evidence": ["<artifact path, log, URL, screenshot, or readback>"],
+  "known_failures": [],
+  "risks": [],
+  "next_gate": "<next role or gate>",
+  "owner": "<profile or human>"
+}

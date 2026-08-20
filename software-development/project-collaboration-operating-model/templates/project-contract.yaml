@@ -1,0 +1,29 @@
+# Copy this file into a project's control-plane directory.
+# Fill project-specific values. Keep secrets out of this file.
+project:
+  name: "<project-name>"
+  current_milestone: "<milestone>"
+  goal: "<observable outcome>"
+  non_goals:
+    - "<explicitly postponed work>"
+  acceptance:
+    - "<observable acceptance criterion>"
+  repo: "<repository path or URL>"
+  base_branch: "main"
+  test_commands:
+    - "<command>"
+  qa_protocol: "<skill, script, or document>"
+  delivery_target: "<remote, deployment, file, or user destination>"
+  rollback: "<rollback procedure>"
+  cleanup:
+    workspace_root: "<workspace parent>"
+    process_patterns: []
+    scheduler_checks: []
+  owners:
+    orchestrator: "default"
+    product: "product-manager"
+    implementation: "coder"
+    review: "reviewer"
+    qa: "bug-basher"
+    operations: "ops"
+    research: "researcher"

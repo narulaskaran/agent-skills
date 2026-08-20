@@ -28,6 +28,7 @@ Opinionated, skills for AI agents which I've developed over time from my own Her
 | [systematic-debugging](software-development/systematic-debugging/SKILL.md) | 4-phase root cause debugging. Understand an issue before fixing. |
 | [requesting-code-review](software-development/requesting-code-review/SKILL.md) | Pre-commit verification pipeline: security scan, baseline-aware quality gates, independent reviewer subagent, auto-fix loop. |
 | [subagent-driven-development](software-development/subagent-driven-development/SKILL.md) | Execute implementation plans via delegate_task subagents with two-stage review (spec then quality). |
+| [project-collaboration-operating-model](software-development/project-collaboration-operating-model/SKILL.md) | Coordinate multi-agent work from brief through verified delivery and clean shutdown. |
 | [writing-plans](software-development/writing-plans/SKILL.md) | Write implementation plans for zero-context implementers: exact files, complete code, testing commands, verification steps. |
 | [consistency-check](software-development/consistency-check/SKILL.md) | Verify multi-part outputs before marking done. Every requirement → satisfied, every deliverable → written and verified. |
 
