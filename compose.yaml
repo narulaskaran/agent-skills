@@ -1,0 +1,10 @@
+services:
+  nano:
+    build: .
+    image: nano:local
+    container_name: nano
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    mem_limit: 2g

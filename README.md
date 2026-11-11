@@ -1,57 +1,76 @@
-# Agent Skills
-Opinionated, skills for AI agents which I've developed over time from my own Hermes agent.
+# Nano
 
-## Skills
+A small personal agent you text over iMessage. It runs as one Docker container, built on the [Pi](https://pi.dev) agent SDK, and reaches iMessage through [Photon](https://photon.codes). No Mac, no public URL, no other chat platforms.
 
-### Browser Use
+What it does today:
 
-| Skill | What it does | 
-|-------|-------------|
-| [shopify-stripe-checkout](browser-use/shopify-stripe-checkout/SKILL.md) | Checkout at online Shopify stores. Handles Stripe PCI iframes (CDP keystroke injection), cart API, discount codes. Generalized from Birch Coffee. | 
-| [postalform-mailing](browser-use/postalform-mailing/SKILL.md) | Design and mail physical postcards via PostalForm. Covers image generation, HTML card design to bleed specs, PDF export, base64 JPEG workaround, batch orders, SPT recovery, MPP machine API payment via Stripe Link CLI. | 
-| [postalform-checkout](browser-use/postalform-checkout/SKILL.md) | Browser-based PostalForm website checkout — fallback for when the MPP API is rate-limited. |
-| [postalform-lessons](browser-use/postalform-lessons/SKILL.md) | Patterns from PostalForm + MPP flows. Prevents hours of debugging. Key: compress PDFs to JPEG, base64 data URLs, mppx serialization, one SPT per payment, space orders 1h apart. |
-| [autobrowse-workflow](browser-use/autobrowse-workflow/SKILL.md) | Meta-skill for building reliable browser automation skills. Iterative trace-driven improvement via delegate_task inner agents. The methodology behind all checkout skills in this repo. |
-| [web-checkout](browser-use/web-checkout/SKILL.md) | Decision patterns for autonomous web checkout: API vs browser, CAPTCHAs, payment iframes, rate limits. When to fall back, when to push through. |
+- **Chat over iMessage** with text and images in, text and files out, typing indicators and read receipts. Only allow-listed numbers are answered.
+- **Reminders and scheduled jobs** the agent creates itself: one-time messages, conditional reminders, recurring tasks, and script monitors that only speak when something changed.
+- **Memory on disk**: a short owner profile, a Markdown knowledge base with index files, and a daily conversation log the agent can search.
+- **No session management for you**: after a few hours of silence the next text starts a fresh context window that carries over the last few messages. Long active stretches are compacted automatically.
+- **Web lookups**, a shell and file tools inside the container.
+- **Guided first run**: the first conversation asks your name, timezone and what you want help with, then saves them.
 
-### Payments
+## Quick start
 
-| Skill | What it does |
-|-------|-------------|
-| [mpp-payments](payments/mpp-payments/SKILL.md) | Machine Payment Protocol patterns. Reusable Stripe Link CLI → mppx serialization flow, credential lifecycle, 402 challenge-response authentication. | 
-| [autonomous-operations](payments/autonomous-operations/SKILL.md) | End-to-end autonomous operations: spending protocols with verification gates, email-driven task intake (AgentMail → Kanban), system health checks, calendar invite workflows, and cron bomb detection. |
+You need Docker, a Photon project, and one model API key.
 
-### Software Development
+```bash
+git clone <this repo> nano && cd nano
+cp .env.example .env      # fill in the four required values
+docker compose up -d --build
+docker compose logs -f nano
+```
 
-| Skill | What it does |
-|-------|-------------|
-| [systematic-debugging](software-development/systematic-debugging/SKILL.md) | 4-phase root cause debugging. Understand an issue before fixing. |
-| [requesting-code-review](software-development/requesting-code-review/SKILL.md) | Pre-commit verification pipeline: security scan, baseline-aware quality gates, independent reviewer subagent, auto-fix loop. |
-| [subagent-driven-development](software-development/subagent-driven-development/SKILL.md) | Execute implementation plans via delegate_task subagents with two-stage review (spec then quality). |
-| [project-collaboration-operating-model](software-development/project-collaboration-operating-model/SKILL.md) | Coordinate multi-agent work from brief through verified delivery and clean shutdown. |
-| [writing-plans](software-development/writing-plans/SKILL.md) | Write implementation plans for zero-context implementers: exact files, complete code, testing commands, verification steps. |
-| [consistency-check](software-development/consistency-check/SKILL.md) | Verify multi-part outputs before marking done. Every requirement → satisfied, every deliverable → written and verified. |
+Then text your Photon number from the phone number you allow-listed. To verify the configuration without connecting, run `docker compose run --rm nano node /app/src/index.ts --check`.
 
-### Health
+If you hand this repo to a coding agent, point it at [AGENTS.md](AGENTS.md); it has the full setup procedure.
 
-| Skill | What it does |
-|-------|-------------|
-| [food-tracking](health/food-tracking/SKILL.md) | Track daily food intake with calories, protein, and fiber. Supports photo-based and text-based entries, restaurant menu research, and health troubleshooting. |
+## Configuration
 
-### DevOps
+Everything is in `.env` (see [.env.example](.env.example)).
 
-| Skill | What it does |
-|-------|-------------|
-| [skill-sync](devops/skill-sync/SKILL.md) | Deterministic local/repository skill audit with explicit copy selection, branch protection, PII checks, and verified PR flow. |
+| Variable | Required | Meaning |
+|---|---|---|
+| `PHOTON_PROJECT_ID`, `PHOTON_PROJECT_SECRET` | yes | From your Photon project settings |
+| `NANO_ALLOWED_USERS` | yes | Your phone number(s) in E.164 form, comma separated |
+| A model key, e.g. `DEEPSEEK_API_KEY` | yes | The key for the provider named in `NANO_MODEL` |
+| `NANO_MODEL` | no | `provider/model-id`, default `deepseek/deepseek-flash` |
+| `BRAVE_SEARCH_API_KEY` | no | Enables the `web_search` tool |
+| `TZ` | no | Fallback timezone until Nano learns yours |
+| `NANO_IDLE_HOURS` | no | Silence before a fresh context window, default 4 |
+| `NANO_PACKS` | no | Skill packs to load, default `core` |
 
-## How skills are made
+## Layout
 
-These come from real sessions where either an agent tried to do something, failed, iterated, and eventually identified a reliable path, or where I requested and fine tuned a workflow for my own usage.
+```
+src/            the whole runtime (about 1,150 lines of TypeScript, no build step)
+  index.ts      wiring and shutdown
+  channel.ts    Photon iMessage channel, plus a stdin channel for local testing
+  agent.ts      one conversation: Pi session, idle rollover, message bursts
+  scheduler.ts  reminders, cron jobs, script monitors
+  tools.ts      tools added on top of Pi's built-ins
+  prompt.ts     system prompt assembly
+prompts/        the standing prompt
+skills/<pack>/  Agent Skills, grouped into packs
+templates/kb/   starter knowledge base for new installs
+data/           everything personal: sessions, logs, profile, knowledge base (git-ignored)
+```
 
-## Contributing
+All personal state lives in `data/`. Nothing in it belongs in this repository.
 
-PRs welcome. If you use a skill and find a better way, send the improvement back. Good PRs include:
+## Skill packs
 
-- What broke or was slow
-- What you changed
-- Why it's better (fewer turns, lower cost, higher success rate)
+| Pack | Status |
+|---|---|
+| `core` | Working. Scheduling patterns. |
+| `food` | Working. Food diary (calories, protein, fiber) in a SQLite file, through a `food` command. Add `food` to `NANO_PACKS`. |
+| `purchases` | Carried over (web checkout, Stripe Link, MPP, postcards); not yet adapted. |
+
+## Development
+
+```bash
+npm install --ignore-scripts
+npm run typecheck && npm test
+NANO_CHANNEL=stdin NANO_DATA_DIR=/tmp/nano-dev DEEPSEEK_API_KEY=... npm start   # type messages on stdin
+```
