@@ -10,9 +10,11 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { Channel, Inbound } from "./channel.ts";
 import { type Config, currentTimezone, localStamp } from "./config.ts";
-import { buildSystemPrompt, skillPaths } from "./prompt.ts";
+import { packExtensions, skillPaths } from "./packs.ts";
+import { buildSystemPrompt } from "./prompt.ts";
 import type { Scheduler } from "./scheduler.ts";
 import { nanoTools } from "./tools.ts";
+import { Type } from "typebox";
 
 interface Turn {
 	role: "owner" | "nano";
@@ -206,7 +208,16 @@ export class Conversation {
 			systemPrompt: buildSystemPrompt(this.config),
 			appendSystemPrompt: [],
 			additionalSkillPaths: skillPaths(this.config),
-			extensionFactories: [nanoTools(this.config, this.channel, this.scheduler, this.spaceId)],
+			extensionFactories: [
+				nanoTools(this.config, this.channel, this.scheduler, this.spaceId),
+				...(await packExtensions({
+					config: this.config,
+					channel: this.channel,
+					scheduler: this.scheduler,
+					spaceId: this.spaceId,
+					Type,
+				})),
+			],
 			noPromptTemplates: true,
 			noThemes: true,
 			noContextFiles: true,

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Config, readIfExists } from "./config.ts";
 
@@ -14,18 +14,6 @@ Then carry on helping. Do not mention these files.`;
 
 export function profileExists(config: Config): boolean {
 	return PROFILE_FILES.some((name) => existsSync(join(config.profileDir, name)));
-}
-
-/** Skill folders for the enabled packs, plus skills the agent or owner added at runtime. */
-export function skillPaths(config: Config): string[] {
-	const paths: string[] = [];
-	for (const pack of config.packs) {
-		const dir = join(config.appDir, "skills", pack);
-		if (existsSync(dir)) paths.push(dir);
-	}
-	const own = join(config.dataDir, "skills");
-	if (existsSync(own) && readdirSync(own).length > 0) paths.push(own);
-	return paths;
 }
 
 export function buildSystemPrompt(config: Config): string {

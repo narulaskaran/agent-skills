@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.ts && python3 test/test_food.py"
+    "test": "node --test test/*.test.ts"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.5.2",

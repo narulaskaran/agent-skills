@@ -1,11 +1,13 @@
 import { Conversation, createModelRuntime, StateStore } from "./agent.ts";
 import { type Channel, createPhotonChannel, createStdinChannel } from "./channel.ts";
 import { currentTimezone, loadConfig, startTimezoneSync } from "./config.ts";
-import { profileExists, skillPaths } from "./prompt.ts";
+import { extendPath, skillPaths } from "./packs.ts";
+import { profileExists } from "./prompt.ts";
 import { Scheduler } from "./scheduler.ts";
 
 async function main(): Promise<void> {
 	const config = loadConfig();
+	extendPath(config);
 	const modelRuntime = await createModelRuntime(config);
 	const model = modelRuntime.getModel(config.modelProvider, config.modelId);
 	if (!model) {

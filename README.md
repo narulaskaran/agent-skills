@@ -44,28 +44,44 @@ Everything is in `.env` (see [.env.example](.env.example)).
 ## Layout
 
 ```
-src/            the whole runtime (about 1,150 lines of TypeScript, no build step)
+src/            the runtime (TypeScript, no build step)
   index.ts      wiring and shutdown
   channel.ts    Photon iMessage channel, plus a stdin channel for local testing
   agent.ts      one conversation: Pi session, idle rollover, message bursts
-  scheduler.ts  reminders, cron jobs, script monitors
+  scheduler.ts  reminders, cron jobs, script monitors, outbox
+  packs.ts      pack loading
   tools.ts      tools added on top of Pi's built-ins
   prompt.ts     system prompt assembly
 prompts/        the standing prompt
-skills/<pack>/  Agent Skills, grouped into packs
+packs/<name>/   capabilities shipped with Nano
 templates/kb/   starter knowledge base for new installs
-data/           everything personal: sessions, logs, profile, knowledge base (git-ignored)
+data/           everything personal: sessions, logs, profile, knowledge base, private packs (git-ignored)
 ```
 
 All personal state lives in `data/`. Nothing in it belongs in this repository.
 
-## Skill packs
+## Packs
+
+A pack is a folder that adds one capability. `NANO_PACKS` lists the ones to load.
+
+```
+<pack>/skills/<skill>/SKILL.md   Agent Skills, advertised to the model and read on demand
+<pack>/extension.ts              optional: tools and hooks (default export `(ctx) => ExtensionFactory`)
+<pack>/bin/                      optional: commands put on PATH for the agent's shell
+<pack>/install.sh                optional: system dependencies, run when the image is built
+<pack>/env.example               optional: settings the pack reads
+```
+
+Packs in `packs/` ship with Nano and should be useful to anyone. Your own workflows go in `data/packs/<name>/` with the same layout; they are loaded the same way and never leave your machine.
 
 | Pack | Status |
 |---|---|
 | `core` | Working. Scheduling patterns. |
-| `food` | Working. Food diary (calories, protein, fiber) in a SQLite file, through a `food` command. Add `food` to `NANO_PACKS`. |
-| `purchases` | Carried over (web checkout, Stripe Link, MPP, postcards); not yet adapted. |
+| `purchases` | Carried over from an earlier agent (web checkout, Stripe Link, MPP); being adapted. |
+
+## Sending through Nano from other programs
+
+Anything on the machine can have Nano text the owner by dropping a file into `data/outbox/`: a `.txt` file is sent as is; a `.json` file is `{"text": "...", "kind": "message" | "task"}`, where `task` hands the text to the agent as instructions. Write to a temporary name and rename, so a half-written file is never picked up.
 
 ## Development
 

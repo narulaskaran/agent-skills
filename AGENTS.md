@@ -23,7 +23,8 @@ If there is no reply: check the logs for `ignoring message from non-allowed send
 - Node 24, TypeScript run directly with no build step. Use erasable syntax only (no enums, no parameter properties).
 - `npm run typecheck && npm test` must pass before you call a change done.
 - Test conversation behaviour locally with `NANO_CHANNEL=stdin` and a throwaway `NANO_DATA_DIR`.
-- Keep the runtime small. Prefer a skill (Markdown in `skills/<pack>/`) over new runtime code when instructions are enough.
+- Keep the runtime small. Prefer a skill (Markdown) over new runtime code when instructions are enough.
+- New capabilities are packs (see "Packs" in the README). A pack keeps everything it needs inside `packs/<name>/` and touches `src/` only when the runtime truly lacks a hook. Shipped packs must be useful to any owner; anything specific to one person belongs in `data/packs/`, outside the repository.
 - `@spectrum-ts/*` and `@earendil-works/pi-*` are pinned to exact versions; both ship breaking changes. Read their type definitions in `node_modules` before changing calls into them.
 
 ## Zero personal data

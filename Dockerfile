@@ -9,11 +9,11 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 COPY src ./src
 COPY prompts ./prompts
-COPY skills ./skills
+COPY packs ./packs
 COPY templates ./templates
 COPY docker/entrypoint.sh /usr/local/bin/nano-entrypoint
 RUN chmod 755 /usr/local/bin/nano-entrypoint \
- && ln -s /app/skills/food/food-tracking/scripts/food.py /usr/local/bin/food
+ && for f in /app/packs/*/install.sh; do [ -f "$f" ] && bash "$f"; done; true
 
 ENV NANO_DATA_DIR=/data NODE_ENV=production NODE_NO_WARNINGS=1
 VOLUME /data
