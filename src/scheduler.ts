@@ -26,11 +26,17 @@ export interface Job {
 	spaceId: string;
 	createdAt: number;
 	lastFired?: number;
+	/** Agent work (task, or script then task) runs in a background worker instead of the main conversation. */
+	background?: boolean;
+	model?: "main" | "local";
+	private?: boolean;
 }
 
 export interface JobSink {
 	send(spaceId: string, text: string): Promise<void>;
 	task(spaceId: string, prompt: string): Promise<void>;
+	/** Start a background worker; its answer comes back through the task hand-back. */
+	background(spaceId: string, work: { title: string; instructions: string; model?: "main" | "local"; private?: boolean }): Promise<void>;
 }
 
 const TICK_MS = 20_000;
@@ -248,17 +254,21 @@ export class Scheduler {
 	}
 
 	private async fire(job: Job): Promise<void> {
-		console.error(`nano: firing ${job.kind} job ${job.id} (${job.name})`);
+		console.error(`nano: firing ${job.kind} job ${job.id} (${job.name})${job.background ? " in the background" : ""}`);
+		const agent = (prompt: string) =>
+			job.background
+				? this.sink.background(job.spaceId, { title: job.name, instructions: prompt, model: job.model, private: job.private })
+				: this.sink.task(job.spaceId, prompt);
 		try {
 			if (job.kind === "message") {
 				await this.sink.send(job.spaceId, job.body);
 			} else if (job.kind === "task") {
-				await this.sink.task(job.spaceId, `Scheduled task "${job.name}":\n${job.body}`);
+				await agent(`Scheduled task "${job.name}":\n${job.body}\nIf there is nothing worth telling the owner, reply exactly [silent].`);
 			} else {
 				const output = await runScript(job.body, join(this.config.dataDir, "workspace"));
 				if (!output) return;
 				if (job.then === "task") {
-					await this.sink.task(job.spaceId, `Scheduled check "${job.name}" produced this output. Decide what, if anything, the owner needs to hear:\n${output}`);
+					await agent(`Scheduled check "${job.name}" produced this output. Decide what, if anything, the owner needs to hear; if nothing, reply exactly [silent]:\n${output}`);
 				} else {
 					await this.sink.send(job.spaceId, output);
 				}

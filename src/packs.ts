@@ -28,6 +28,11 @@ export interface PackContext {
 	spaceId: string;
 	/** TypeBox, for tool parameter schemas. Passed in so private packs need no node_modules. */
 	Type: typeof Type;
+	/**
+	 * Set when the session is a background worker rather than the conversation with the owner.
+	 * `channel` then collects what is sent into the task's result instead of reaching the owner.
+	 */
+	worker?: { taskId: string; title: string; private: boolean };
 }
 
 type PackExtension = (ctx: PackContext) => ExtensionFactory | ExtensionFactory[];
@@ -52,9 +57,11 @@ export function skillPaths(config: Config): string[] {
 	return paths;
 }
 
-/** Put pack commands (and `<data>/bin`) on PATH once at startup. */
+/** Put Nano's own commands, pack commands and `<data>/bin` on PATH once at startup. */
 export function extendPath(config: Config): void {
-	const bins = [...packDirs(config).map((dir) => join(dir, "bin")), join(config.dataDir, "bin")].filter((dir) => existsSync(dir));
+	const bins = [join(config.appDir, "bin"), ...packDirs(config).map((dir) => join(dir, "bin")), join(config.dataDir, "bin")].filter((dir) =>
+		existsSync(dir),
+	);
 	if (bins.length > 0) process.env.PATH = [...bins, process.env.PATH ?? ""].join(delimiter);
 }
 

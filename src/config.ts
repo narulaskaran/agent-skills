@@ -21,6 +21,28 @@ export interface Config {
 	appDir: string;
 	packs: string[];
 	braveApiKey?: string;
+	/** Optional second model on an OpenAI-compatible endpoint the owner runs (llama.cpp, Ollama, ...). */
+	local?: LocalModel;
+	/** Background tasks that may run at once; more wait in a queue. */
+	maxTasks: number;
+	/** A background task still running after this long is stopped and reported as failed. */
+	taskTimeoutMs: number;
+}
+
+export interface LocalModel {
+	modelId: string;
+	/** OpenAI-compatible base URL ending in /v1. */
+	baseUrl: string;
+	apiKey?: string;
+	contextWindow: number;
+}
+
+/** The local model role from the environment, or undefined when it is not configured. */
+export function loadLocalModel(env: NodeJS.ProcessEnv = process.env): LocalModel | undefined {
+	const modelId = env.NANO_LOCAL_MODEL?.trim();
+	const baseUrl = env.NANO_LOCAL_BASE_URL?.trim().replace(/\/+$/, "");
+	if (!modelId || !baseUrl) return undefined;
+	return { modelId, baseUrl, apiKey: env.NANO_LOCAL_API_KEY || undefined, contextWindow: Number(env.NANO_LOCAL_CONTEXT || 32_768) };
 }
 
 function list(value: string | undefined): string[] {
@@ -54,10 +76,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 		appDir,
 		packs: list(env.NANO_PACKS ?? "core"),
 		braveApiKey: env.BRAVE_SEARCH_API_KEY || undefined,
+		local: loadLocalModel(env),
+		maxTasks: Math.max(1, Number(env.NANO_MAX_TASKS || 3)),
+		taskTimeoutMs: Math.max(1, Number(env.NANO_TASK_TIMEOUT_MINUTES || 30)) * 60_000,
 	};
 
 	const problems: string[] = [];
 	if (!config.modelId) problems.push("NANO_MODEL must look like provider/model-id");
+	if (Boolean(env.NANO_LOCAL_MODEL?.trim()) !== Boolean(env.NANO_LOCAL_BASE_URL?.trim())) {
+		problems.push("NANO_LOCAL_MODEL and NANO_LOCAL_BASE_URL must be set together");
+	}
+	if (config.local && !(config.local.contextWindow > 0)) problems.push("NANO_LOCAL_CONTEXT must be a number of tokens");
 	if (channel === "photon") {
 		if (!config.photonProjectId) problems.push("PHOTON_PROJECT_ID is not set");
 		if (!config.photonProjectSecret) problems.push("PHOTON_PROJECT_SECRET is not set");

@@ -1,9 +1,15 @@
-import { Conversation, createModelRuntime, StateStore } from "./agent.ts";
+import { join } from "node:path";
+import { Conversation, StateStore } from "./agent.ts";
 import { type Channel, createPhotonChannel, createStdinChannel } from "./channel.ts";
 import { currentTimezone, loadConfig, startTimezoneSync } from "./config.ts";
+import { createModelRuntime, LOCAL_PROVIDER } from "./models.ts";
 import { extendPath, skillPaths } from "./packs.ts";
 import { profileExists } from "./prompt.ts";
 import { Scheduler } from "./scheduler.ts";
+import { TaskManager } from "./tasks.ts";
+import { createWorkerRunner } from "./worker.ts";
+
+const HAND_BACK_NOTE = "Result of a background task, for you to relay";
 
 async function main(): Promise<void> {
 	const config = loadConfig();
@@ -19,8 +25,8 @@ async function main(): Promise<void> {
 	}
 
 	console.error(
-		`nano: model ${config.modelProvider}/${config.modelId}, timezone ${currentTimezone(config)}, ` +
-			`packs [${config.packs.join(", ")}], skill dirs ${skillPaths(config).length}, ` +
+		`nano: model ${config.modelProvider}/${config.modelId}, local ${config.local ? `${config.local.modelId} at ${config.local.baseUrl}` : "none"}, ` +
+			`timezone ${currentTimezone(config)}, packs [${config.packs.join(", ")}], skill dirs ${skillPaths(config).length}, ` +
 			`profile ${profileExists(config) ? "found" : "missing (first-run onboarding)"}, kb ${config.kbDir}`,
 	);
 
@@ -29,6 +35,13 @@ async function main(): Promise<void> {
 		const available = await modelRuntime.getAllAvailable(config.modelProvider);
 		if (!available.some((m) => m.id === config.modelId)) {
 			throw new Error(`No credentials for ${config.modelProvider}. Set its API key in .env (see .env.example).`);
+		}
+		if (config.local) {
+			if (!modelRuntime.getModel(LOCAL_PROVIDER, config.local.modelId)) throw new Error("The local model could not be registered.");
+			const response = await fetch(`${config.local.baseUrl}/models`, { signal: AbortSignal.timeout(5000) }).catch((error: Error) => error);
+			if (response instanceof Error || !response.ok) {
+				throw new Error(`Local model endpoint ${config.local.baseUrl} is not reachable (${response instanceof Error ? response.message : `HTTP ${response.status}`}).`);
+			}
 		}
 		console.error("nano: check ok");
 		return;
@@ -40,11 +53,28 @@ async function main(): Promise<void> {
 	const scheduler: Scheduler = new Scheduler(config, {
 		send: (spaceId, text) => conversation(spaceId).deliver(text),
 		task: (spaceId, prompt) => conversation(spaceId).inject(prompt),
+		background: async (spaceId, work) => {
+			tasks.start({
+				title: work.title,
+				instructions: work.instructions,
+				role: work.model ?? "main",
+				private: Boolean(work.private),
+				spaceId,
+				source: "schedule",
+			});
+		},
+	});
+	const tasks: TaskManager = new TaskManager({
+		path: join(config.dataDir, "tasks.json"),
+		maxConcurrent: config.maxTasks,
+		timeoutMs: config.taskTimeoutMs,
+		runner: createWorkerRunner({ config, modelRuntime, scheduler }),
+		handBack: (spaceId, prompt) => conversation(spaceId).inject(prompt, HAND_BACK_NOTE),
 	});
 	function conversation(spaceId: string): Conversation {
 		let c = conversations.get(spaceId);
 		if (!c) {
-			c = new Conversation(spaceId, config, channel, store, modelRuntime, scheduler);
+			c = new Conversation(spaceId, config, channel, store, modelRuntime, scheduler, tasks);
 			conversations.set(spaceId, c);
 		}
 		return c;
@@ -56,6 +86,7 @@ async function main(): Promise<void> {
 		stopping = true;
 		console.error(`nano: ${signal}, shutting down`);
 		scheduler.stop();
+		tasks.stop();
 		await Promise.allSettled([...conversations.values()].map((c) => c.dispose()));
 		await channel.stop().catch(() => {});
 		process.exit(0);
@@ -65,7 +96,8 @@ async function main(): Promise<void> {
 
 	startTimezoneSync(process.env.NANO_TZ_URL);
 	scheduler.start();
-	console.error(`nano: listening on ${config.channel}, ${scheduler.list().length} scheduled job(s)`);
+	void tasks.reportLost();
+	console.error(`nano: listening on ${config.channel}, ${scheduler.list().length} scheduled job(s), up to ${config.maxTasks} background task(s)`);
 	await channel.start((message) => conversation(message.spaceId).receive(message));
 	await shutdown("channel closed");
 }
