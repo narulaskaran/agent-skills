@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Connect Nano to T3 Code's MCP server with a one-time pairing code. See packs/t3code/README.md.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec node "$here/../connect.ts" "$@"

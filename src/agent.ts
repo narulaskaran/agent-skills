@@ -177,6 +177,8 @@ export class Conversation {
 		clearTimeout(this.timer);
 		this.unsubscribe?.();
 		if (this.session?.isStreaming) await this.session.abort().catch(() => {});
+		// AgentSession.dispose() does not emit session_shutdown; extensions (MCP servers) clean up on it.
+		await this.session?.extensionRunner.emit({ type: "session_shutdown", reason: "quit" }).catch(() => {});
 		this.session?.dispose();
 		this.session = undefined;
 	}
