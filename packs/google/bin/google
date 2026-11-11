@@ -1,0 +1,4 @@
+#!/bin/sh
+# Gmail and Google Calendar CLI. See ../README.md or `google help`.
+here=$(dirname "$(readlink -f "$0")")
+exec node --no-warnings "$here/../lib/main.ts" "$@"
