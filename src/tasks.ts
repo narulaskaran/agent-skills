@@ -43,6 +43,8 @@ export interface Task extends TaskSpec {
 	note?: string;
 	/** A lost task has been reported to the owner once. */
 	reported?: boolean;
+	/** False while a finished task's hand-back has not been handled by the main conversation yet. */
+	delivered?: boolean;
 }
 
 export type TaskRunner = (task: Task, signal: AbortSignal, update: (fields: Pick<Task, "sessionFile" | "model">) => void) => Promise<TaskResult>;
@@ -164,14 +166,21 @@ export class TaskManager {
 		return task;
 	}
 
-	/** Report tasks lost in a restart, once. Call after the conversations can receive events. */
+	/**
+	 * After a restart: hand back results the previous process finished but never delivered, then
+	 * report tasks it lost, once. Call when the conversations can receive events.
+	 */
 	async reportLost(): Promise<void> {
+		const undelivered = this.tasks.filter((t) => t.delivered === false);
 		const lost = this.tasks.filter((t) => t.status === "lost" && !t.reported);
 		const bySpace = new Map<string, Task[]>();
 		for (const task of lost) bySpace.set(task.spaceId, [...(bySpace.get(task.spaceId) ?? []), task]);
 		for (const task of lost) task.reported = true;
 		this.save();
-		await Promise.all([...bySpace].map(([spaceId, tasks]) => this.options.handBack(spaceId, lostPrompt(tasks))));
+		await Promise.all([
+			...undelivered.map((task) => this.deliver(task)),
+			...[...bySpace].map(([spaceId, tasks]) => this.options.handBack(spaceId, lostPrompt(tasks))),
+		]);
 	}
 
 	/** Shutdown: stop the workers but leave them marked running, so the next start reports them as lost. */
@@ -225,14 +234,28 @@ export class TaskManager {
 		Object.assign(task, fields, { status, endedAt: this.now() });
 		this.save();
 		console.error(`nano: task ${task.id} (${task.title}) ${status}${task.error ? `: ${task.error}` : ""}`);
+		void this.deliver(task);
+	}
+
+	/** Hand a finished task back; it counts as delivered once the main conversation has handled it. */
+	private async deliver(task: Task): Promise<void> {
 		const prompt = handBackPrompt(task);
-		if (prompt) {
-			this.options.handBack(task.spaceId, prompt).catch((error) => console.error(`nano: hand-back of task ${task.id} failed:`, error));
+		if (!prompt) return;
+		task.delivered = false;
+		this.save();
+		try {
+			await this.options.handBack(task.spaceId, prompt);
+			task.delivered = true;
+			this.save();
+		} catch (error) {
+			console.error(`nano: hand-back of task ${task.id} failed:`, error);
 		}
 	}
 
 	private save(): void {
-		const finished = this.tasks.filter((t) => t.status !== "queued" && t.status !== "running" && (t.status !== "lost" || t.reported));
+		const finished = this.tasks.filter(
+			(t) => t.status !== "queued" && t.status !== "running" && t.delivered !== false && (t.status !== "lost" || t.reported),
+		);
 		if (finished.length > KEEP_FINISHED) {
 			const drop = new Set(finished.slice(0, finished.length - KEEP_FINISHED));
 			this.tasks = this.tasks.filter((t) => !drop.has(t));

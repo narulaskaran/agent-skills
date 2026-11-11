@@ -145,6 +145,30 @@ test("tasks lost in a restart are reported once", async () => {
 	assert.equal(third.handed.length, 0);
 });
 
+test("a result finished but not yet handled before a restart is handed back after it, once", async () => {
+	const path = join(mkdtempSync(join(tmpdir(), "nano-tasks-")), "tasks.json");
+	const fake = fakeRunner();
+	const before = new TaskManager({
+		path,
+		maxConcurrent: 1,
+		timeoutMs: 60_000,
+		runner: fake.runner,
+		handBack: () => new Promise(() => {}), // the main conversation never gets to it: the process dies first
+	});
+	before.start(spec("finished late"));
+	await tick();
+	await fake.finish("finished late");
+	assert.equal(JSON.parse(readFileSync(path, "utf8")).tasks[0].delivered, false);
+
+	const after = setup({ path });
+	await after.manager.reportLost();
+	assert.equal(after.handed.length, 1);
+	assert.match(after.handed[0]?.prompt ?? "", /"finished late" finished[\s\S]*finished late result/);
+	const again = setup({ path });
+	await again.manager.reportLost();
+	assert.equal(again.handed.length, 0);
+});
+
 test("a corrupt tasks file starts empty", () => {
 	const dir = mkdtempSync(join(tmpdir(), "nano-tasks-"));
 	writeFileSync(join(dir, "tasks.json"), "{not json");

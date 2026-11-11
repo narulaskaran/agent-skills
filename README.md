@@ -49,7 +49,7 @@ Everything is in `.env` (see [.env.example](.env.example)).
 
 ### Background tasks and the local model
 
-The agent hands heavy work to a background task with the `delegate` tool: a separate Pi session with the same tools and skills, minus delegation and messaging the owner. When it ends, only its final answer (not its transcript) is passed back to the main conversation, which tells you about it. Task sessions are kept in `data/sessions/tasks/`, their state in `data/tasks.json`; tasks cut off by a restart are reported once on startup. Scheduled `task` jobs take `background: true` to run the same way.
+The agent hands heavy work to a background task with the `delegate` tool: a separate Pi session with the same tools and skills, minus delegation and messaging the owner. When it ends, only its final answer (not its transcript) is passed back to the main conversation, which tells you about it. Task sessions are kept in `data/sessions/tasks/`, their state in `data/tasks.json`; tasks cut off by a restart are reported once on startup, and results that finished but were not yet relayed are relayed then. Scheduled `task` jobs take `background: true` to run the same way.
 
 Work can ask for the local model in two strengths:
 
