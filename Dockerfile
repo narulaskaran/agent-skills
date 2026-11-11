@@ -13,7 +13,7 @@ COPY packs ./packs
 COPY templates ./templates
 COPY docker/entrypoint.sh /usr/local/bin/nano-entrypoint
 RUN chmod 755 /usr/local/bin/nano-entrypoint \
- && for f in /app/packs/*/install.sh; do [ -f "$f" ] && bash "$f"; done; true
+ && for f in /app/packs/*/install.sh; do if [ -f "$f" ]; then bash "$f"; fi; done
 
 ENV NANO_DATA_DIR=/data NODE_ENV=production NODE_NO_WARNINGS=1
 VOLUME /data
