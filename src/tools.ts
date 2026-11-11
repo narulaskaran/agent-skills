@@ -1,12 +1,52 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
+import type { ExtensionFactory, ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Channel } from "./channel.ts";
 import { type Config, currentTimezone } from "./config.ts";
+import { ask, askLocal, type ChatFn } from "./local.ts";
+import { chooseModel } from "./models.ts";
 import { type Job, parseLocalTime, type Scheduler } from "./scheduler.ts";
+import { workspaceDir } from "./session.ts";
 
-const text = (value: string) => ({ content: [{ type: "text" as const, text: value }], details: {} });
+export const text = (value: string) => ({ content: [{ type: "text" as const, text: value }], details: {} });
+
+export const ModelParam = Type.Optional(
+	Type.Union([Type.Literal("main"), Type.Literal("local")], {
+		description: 'Model to run on. "local": the owner\'s own local model (falls back to the main model if none is configured). Default "main".',
+	}),
+);
+export const PrivateParam = Type.Optional(
+	Type.Boolean({
+		description: "Sensitive content (emails, health, finances, documents): runs only on the local model and is refused if there is none. Only the final answer comes back to you.",
+	}),
+);
+
+/** Refuse private work up front when it could only run on the cloud model. */
+export function assertPrivateAllowed(config: Config, isPrivate: boolean | undefined): void {
+	const choice = chooseModel("local", Boolean(isPrivate), Boolean(config.local));
+	if ("refuse" in choice) throw new Error(choice.refuse);
+}
+
+const workspacePath = (config: Config, path: string) => (isAbsolute(path) ? path : join(workspaceDir(config), path));
+
+/** One-shot fallback on the main model, for non-private ask_local calls when no local model is configured. */
+function mainChat(config: Config, modelRuntime: ModelRuntime): ChatFn {
+	return async (messages, extra, signal) => {
+		if (extra.response_format) return { status: 400, text: "constrained output not supported" };
+		const model = modelRuntime.getModel(config.modelProvider, config.modelId);
+		if (!model) return { status: 404, text: "main model not found" };
+		const [system, ...rest] = messages;
+		const reply = await modelRuntime.completeSimple(
+			model,
+			{ systemPrompt: system?.content, messages: rest.map((m) => ({ role: "user" as const, content: m.content, timestamp: Date.now() })) },
+			{ maxTokens: 2048, signal },
+		);
+		if (reply.stopReason === "error") return { status: 500, text: reply.errorMessage ?? "model error" };
+		const said = reply.content.flatMap((p) => (p.type === "text" ? [p.text] : [])).join("").trim();
+		return { status: 200, text: said };
+	};
+}
 
 export function htmlToText(html: string): string {
 	return html
@@ -29,11 +69,21 @@ function describeJob(job: Job, timeZone: string): string {
 	const when = job.at
 		? new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "medium", timeStyle: "short" }).format(job.at)
 		: `cron ${job.cron}${job.until ? ` until ${new Date(job.until).toISOString().slice(0, 10)}` : ""}`;
-	return `${job.id} | ${job.name} | ${job.kind}${job.then ? `->${job.then}` : ""} | ${when} | ${job.body.replace(/\s+/g, " ").slice(0, 120)}`;
+	const background = job.background ? ` [background${job.private ? ", private" : job.model === "local" ? ", local" : ""}]` : "";
+	return `${job.id} | ${job.name} | ${job.kind}${job.then ? `->${job.then}` : ""}${background} | ${when} | ${job.body.replace(/\s+/g, " ").slice(0, 120)}`;
 }
 
-/** Tools Nano adds on top of Pi's built-in read/bash/edit/write/grep/find/ls. */
-export function nanoTools(config: Config, channel: Channel, scheduler: Scheduler, spaceId: string): ExtensionFactory {
+/**
+ * Tools Nano adds on top of Pi's built-in read/bash/edit/write/grep/find/ls.
+ * In a background worker (`worker: true`), `channel` is a buffer: nothing reaches the owner directly.
+ */
+export function nanoTools(
+	config: Config,
+	channel: Channel,
+	scheduler: Scheduler,
+	spaceId: string,
+	extra: { modelRuntime: ModelRuntime; worker?: boolean },
+): ExtensionFactory {
 	return (pi) => {
 		pi.registerTool({
 			name: "schedule_add",
@@ -44,6 +94,7 @@ export function nanoTools(config: Config, channel: Channel, scheduler: Scheduler
 				'kind "task": at that time you receive `body` as instructions and act on them with your tools. Use when the reminder depends on checking something first, or for recurring research. Write `body` so it makes sense with no other context. If there is nothing worth telling the owner, reply exactly [silent].',
 				'kind "script": run `body` as a shell command. No output means nothing is sent. Output is sent as is (then "send") or handed to you to judge (then "task"). Use for cheap monitors that should only speak on change.',
 				"Give exactly one of `at` (one time, owner's local time like 2026-11-12T09:00) or `cron` (five fields, owner's local time).",
+				"`background: true` (task, or script with then \"task\"): the work runs in a separate background session so it never blocks chatting; only its final answer comes back to you to pass on, and [silent] still means nothing is sent. Use it for slow jobs (research, browsing, many tool calls). `model` and `private` choose where it runs.",
 			].join("\n"),
 			parameters: Type.Object({
 				name: Type.String({ description: "Short label, e.g. 'Return shoes'" }),
@@ -53,21 +104,33 @@ export function nanoTools(config: Config, channel: Channel, scheduler: Scheduler
 				cron: Type.Optional(Type.String()),
 				until: Type.Optional(Type.String({ description: "For cron jobs: stop after this local time" })),
 				then: Type.Optional(Type.Union([Type.Literal("send"), Type.Literal("task")])),
+				background: Type.Optional(Type.Boolean()),
+				model: ModelParam,
+				private: PrivateParam,
 			}),
 			async execute(_id, params) {
 				const tz = currentTimezone(config);
 				if (Boolean(params.at) === Boolean(params.cron)) throw new Error("Give exactly one of `at` or `cron`.");
 				const at = params.at ? parseLocalTime(params.at, tz) : undefined;
 				if (at !== undefined && at < Date.now() - 60_000) throw new Error(`That time is in the past (${params.at}, ${tz}).`);
+				const then = params.kind === "script" ? (params.then ?? "send") : undefined;
+				const usesAgent = params.kind === "task" || then === "task";
+				if ((params.background || params.model || params.private) && !usesAgent) {
+					throw new Error('background, model and private apply to kind "task" or a script with then "task".');
+				}
+				// Private or local work only makes sense off the main thread, which always runs on the main model.
+				const background = Boolean(params.background || params.private || params.model === "local");
+				if (params.private) assertPrivateAllowed(config, true);
 				const job = scheduler.add({
 					name: params.name,
 					kind: params.kind,
 					body: params.body,
-					then: params.kind === "script" ? (params.then ?? "send") : undefined,
+					then,
 					at,
 					cron: params.cron,
 					until: params.until ? parseLocalTime(params.until, tz) : undefined,
 					spaceId,
+					...(background ? { background, model: params.model, private: params.private || undefined } : {}),
 				});
 				return text(`Scheduled: ${describeJob(job, tz)}`);
 			},
@@ -100,17 +163,44 @@ export function nanoTools(config: Config, channel: Channel, scheduler: Scheduler
 		pi.registerTool({
 			name: "send_file",
 			label: "Send file",
-			description:
-				"Send a file or image from disk to the person you are talking to, as an attachment in the chat. Use for pictures, PDFs, exports.",
+			description: extra.worker
+				? "Attach a file from disk to your result. Nano decides whether to send it to the owner."
+				: "Send a file or image from disk to the person you are talking to, as an attachment in the chat. Use for pictures, PDFs, exports.",
 			parameters: Type.Object({
 				path: Type.String({ description: "Absolute path, or relative to the workspace" }),
 				caption: Type.Optional(Type.String({ description: "Short text sent right after the file" })),
 			}),
 			async execute(_id, params) {
-				const path = isAbsolute(params.path) ? params.path : join(config.dataDir, "workspace", params.path);
+				const path = workspacePath(config, params.path);
 				if (!existsSync(path)) throw new Error(`No such file: ${path}`);
 				await channel.sendFile(spaceId, path, params.caption);
-				return text(`Sent ${path}`);
+				return text(extra.worker ? `Attached ${path} to your result` : `Sent ${path}`);
+			},
+		});
+
+		pi.registerTool({
+			name: "ask_local",
+			label: "Ask local model",
+			description: [
+				"One-shot classification or extraction on the owner's local model, over a text or a file, without loading that content into this conversation. Returns only the short answer.",
+				"Use it for sorting, tagging, yes/no checks and pulling a few fields out of sensitive or bulky material (emails, documents, logs). Give `choices` to get exactly one label back.",
+				"Private by default: with no local model configured it refuses. Pass private: false to allow a one-shot call to the main model instead.",
+			].join("\n"),
+			parameters: Type.Object({
+				instruction: Type.String({ description: "What to decide or extract, e.g. 'Is this email a bill that needs paying?'" }),
+				text: Type.Optional(Type.String({ description: "The material, if it is short and already in the conversation" })),
+				path: Type.Optional(Type.String({ description: "A file to read instead of `text` (absolute, or relative to the workspace)" })),
+				choices: Type.Optional(Type.Array(Type.String(), { description: "Allowed labels; the answer is exactly one of them" })),
+				private: Type.Optional(Type.Boolean({ description: "Default true" })),
+			}),
+			async execute(_id, params, signal) {
+				const input = params.path ? readFileSync(workspacePath(config, params.path), "utf8") : params.text;
+				const options = { instruction: params.instruction, input, choices: params.choices, signal };
+				if (config.local) return text(await askLocal(config.local, options));
+				const choice = chooseModel("local", params.private ?? true, false);
+				if ("refuse" in choice) throw new Error(choice.refuse);
+				const answer = await ask(mainChat(config, extra.modelRuntime), options, 64_000);
+				return text(`${answer}\n(${choice.note})`);
 			},
 		});
 

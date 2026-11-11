@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# One-shot call to the local model. See src/local-cli.ts or run `nano-local --help`.
+here="$(dirname "$(readlink -f "$0")")"
+NODE_NO_WARNINGS=1 exec node "$here/../src/local-cli.ts" "$@"

@@ -8,6 +8,8 @@ What it does today:
 - **Reminders and scheduled jobs** the agent creates itself: one-time messages, conditional reminders, recurring tasks, and script monitors that only speak when something changed.
 - **Memory on disk**: a short owner profile, a Markdown knowledge base with index files, and a daily conversation log the agent can search.
 - **No session management for you**: after a few hours of silence the next text starts a fresh context window that carries over the last few messages. Long active stretches are compacted automatically.
+- **Background tasks**: heavy work (research, browsing, checkout flows) is handed to separate sessions, so Nano keeps answering while it runs and reports back when each one is done. Slow scheduled jobs can run the same way.
+- **Optional local model** for private or light work: emails and documents can be sorted and summarised on your own machine without reaching the cloud model.
 - **Web lookups**, a shell and file tools inside the container.
 - **Guided first run**: the first conversation asks your name, timezone and what you want help with, then saves them.
 
@@ -40,6 +42,21 @@ Everything is in `.env` (see [.env.example](.env.example)).
 | `TZ` | no | Fallback timezone until Nano learns yours |
 | `NANO_IDLE_HOURS` | no | Silence before a fresh context window, default 4 |
 | `NANO_PACKS` | no | Skill packs to load, default `core` |
+| `NANO_MAX_TASKS` | no | Background tasks running at once, default 3; more wait in a queue |
+| `NANO_TASK_TIMEOUT_MINUTES` | no | A background task still running after this is stopped and reported, default 30 |
+| `NANO_LOCAL_MODEL`, `NANO_LOCAL_BASE_URL` | no | A local model id and its OpenAI-compatible `/v1` endpoint (llama.cpp, Ollama, ...) |
+| `NANO_LOCAL_API_KEY`, `NANO_LOCAL_CONTEXT` | no | Its key if it needs one, and its context window in tokens (default 32768) |
+
+### Background tasks and the local model
+
+The agent hands heavy work to a background task with the `delegate` tool: a separate Pi session with the same tools and skills, minus delegation and messaging the owner. When it ends, only its final answer (not its transcript) is passed back to the main conversation, which tells you about it. Task sessions are kept in `data/sessions/tasks/`, their state in `data/tasks.json`; tasks cut off by a restart are reported once on startup. Scheduled `task` jobs take `background: true` to run the same way.
+
+Work can ask for the local model in two strengths:
+
+- `model: "local"` prefers the local model and falls back to the main model, with a note, when none is configured.
+- `private: true` runs only on the local model and is refused when none is configured. It never falls back to the cloud.
+
+A private task's content stays on the local model, but its final answer goes to the main (cloud) model so Nano can tell you about it. Private instructions should ask for only what you need, such as "amount and due date", not "summarise the email". `ask_local` (a tool) and `nano-local` (a command for scripts, e.g. `nano-local "Is this a bill?" --choices yes,no < mail.txt`) make one-shot classification or extraction calls whose input never enters a conversation.
 
 ## Layout
 
@@ -47,11 +64,18 @@ Everything is in `.env` (see [.env.example](.env.example)).
 src/            the runtime (TypeScript, no build step)
   index.ts      wiring and shutdown
   channel.ts    Photon iMessage channel, plus a stdin channel for local testing
-  agent.ts      one conversation: Pi session, idle rollover, message bursts
+  agent.ts      one conversation: Pi session, idle rollover, message bursts, turn queue
+  session.ts    Pi session setup shared by conversations and workers
+  tasks.ts      background tasks: queue, limits, persistence, hand-back
+  worker.ts     runs a background task in its own Pi session
+  models.ts     model runtime, local model provider, main/local/private choice
+  local.ts      one-shot local model calls (ask_local, nano-local)
   scheduler.ts  reminders, cron jobs, script monitors, outbox
   packs.ts      pack loading
   tools.ts      tools added on top of Pi's built-ins
+  task-tools.ts delegate and task management tools
   prompt.ts     system prompt assembly
+bin/            commands on PATH (nano-local)
 prompts/        the standing prompt
 packs/<name>/   capabilities shipped with Nano
 templates/kb/   starter knowledge base for new installs
