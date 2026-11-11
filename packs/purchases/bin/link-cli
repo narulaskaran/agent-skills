@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Stripe Link CLI with its login kept under Nano's data directory. LINK_AUTH_FILE (or --auth)
+# points it at another file, for example a login shared from an earlier install.
+set -euo pipefail
+export LINK_AUTH_FILE="${LINK_AUTH_FILE:-${NANO_DATA_DIR:-/data}/link/auth.json}"
+# The image pins the version; update notices would only suggest an install that cannot run here.
+export NO_UPDATE_NOTIFIER="${NO_UPDATE_NOTIFIER:-1}"
+mkdir -p -m 700 "$(dirname "$LINK_AUTH_FILE")"
+exec "${NANO_LINK_CLI:-/opt/link-cli/bin/link-cli}" "$@"

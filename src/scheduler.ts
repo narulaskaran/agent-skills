@@ -287,7 +287,7 @@ export class Scheduler {
 
 function runScript(command: string, cwd: string): Promise<string> {
 	return new Promise((resolve, reject) => {
-		execFile("bash", ["-lc", command], { cwd, timeout: SCRIPT_TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+		execFile("bash", ["-c", command], { cwd, timeout: SCRIPT_TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
 			if (error) reject(new Error(`${error.message}${stderr ? `: ${stderr.slice(0, 300)}` : ""}`));
 			else resolve(stdout.trim().slice(0, 8000));
 		});

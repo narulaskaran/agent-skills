@@ -15,7 +15,7 @@ COPY bin ./bin
 COPY docker/entrypoint.sh /usr/local/bin/nano-entrypoint
 RUN chmod 755 /usr/local/bin/nano-entrypoint /app/bin/* \
  && ln -s /app/bin/nano-local /usr/local/bin/nano-local \
- && for f in /app/packs/*/install.sh; do [ -f "$f" ] && bash "$f"; done; true
+ && for f in /app/packs/*/install.sh; do if [ -f "$f" ]; then bash "$f"; fi; done
 
 ENV NANO_DATA_DIR=/data NODE_ENV=production NODE_NO_WARNINGS=1
 VOLUME /data
