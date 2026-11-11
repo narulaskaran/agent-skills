@@ -1,3 +1,4 @@
+import { TaskManager } from "../../src/tasks.ts";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -46,8 +47,15 @@ export async function scriptedConversation(options: { packs: string; env?: Recor
 		async typing() {},
 		async stop() {},
 	};
-	const scheduler = new Scheduler(config, { send: async () => {}, task: async () => {} });
-	const conversation = new Conversation("stdin", config, channel, new StateStore(dataDir), runtime, scheduler);
+	const scheduler = new Scheduler(config, { send: async () => {}, task: async () => {}, background: async () => {} });
+	const tasks = new TaskManager({
+		path: join(dataDir, "tasks.json"),
+		maxConcurrent: 1,
+		timeoutMs: 60_000,
+		runner: async () => ({ text: "", files: [] }),
+		handBack: async () => {},
+	});
+	const conversation = new Conversation("stdin", config, channel, new StateStore(dataDir), runtime, scheduler, tasks);
 	return {
 		config,
 		dataDir,
