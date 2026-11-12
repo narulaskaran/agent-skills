@@ -10,7 +10,7 @@ The owner does real coding in T3 Code. Repository work goes there, not into your
 ## Tools
 T3 Code's tools are deferred. Load them with `tool_search` (for example `t3 code project thread launch`), then call them by full name:
 - `mcp__t3code__t3_project_list` `{limit: 100}`: projects with `id`, `title`, `workspaceRoot`.
-- `mcp__t3code__t3_thread_launch` `{projectId, title, message, clientRequestId}`: starts a thread; returns its id and `link`.
+- `mcp__t3code__t3_thread_launch` `{projectId, title, message}`: starts a thread; returns its id and `link`. It has no idempotency key.
 - `mcp__t3code__t3_thread_read` `{threadId, limit, maxCharsPerItem}`: status and latest messages. Keep `limit` around 4 and `maxCharsPerItem` around 4000.
 - `mcp__t3code__t3_thread_send` `{threadId, message, mode: "auto"}`: follow-up instructions. `auto` starts an idle thread, steers a running one, or queues.
 - `mcp__t3code__t3_thread_search` `{query}` and `mcp__t3code__t3_thread_list` `{projectId}`: find an existing thread.
@@ -31,7 +31,7 @@ If `tool_search` finds no `mcp__t3code__` tools, or a call fails with 401 or "cr
    Report back: a short summary of what you changed, how you verified it, and the PR or branch name.
    ```
    Include only what the owner told you or what you looked up for this task. Never put tokens, passwords or personal data in a brief.
-4. **Launch.** `t3_thread_launch` with `projectId`, a short imperative `title` ("Fix flaky checkout test"), the brief as `message`, and a unique `clientRequestId` such as `nano-<yyyymmdd-hhmm>-<slug>`. If the call errors or times out, retry once with the same `clientRequestId`; it will not start a second thread. Leave model, `runtimeMode` and `workspaceStrategy` out unless the owner asked; T3 Code applies its defaults and the access level the owner granted. If the owner asks for an isolated checkout, pass `workspaceStrategy: {type: "worktree"}`.
+4. **Launch.** `t3_thread_launch` with `projectId`, a short imperative `title` ("Fix flaky checkout test"), and the brief as `message`. If the response is lost or the call times out, inspect `t3_thread_list` and read any matching thread before retrying: launching has no idempotency key and a blind retry can create duplicate work. Leave model and `runtimeMode` out unless the owner asked; T3 Code applies its defaults and the access level the owner granted. Omitting `workspaceStrategy` selects the project's root checkout. If the owner asks for an isolated checkout, pass `workspaceStrategy: {type: "worktree"}` with the required branch/base fields shown by the current tool schema.
 5. **Confirm** in one or two lines: what you started, in which project, and the `link` exactly as returned. If the link starts with `t3-thread://`, it opens only inside the T3 Code app; say the thread title instead.
 6. **Note it.** Append one line to `t3code-threads.md` in your workspace: date, threadId, project, title, link, what the owner asked. This is how you find the thread again in a later context window.
 7. **Schedule the check-back.** `schedule_add` with kind `task`, `at` about 20 minutes from now (longer for big jobs), and a body that stands alone, for example:
