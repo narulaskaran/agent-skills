@@ -24,7 +24,7 @@ Ask them to text it in exactly this form, optionally followed by the access leve
 
 Nano removes the code from the message before you see it and redeems it. You receive a note saying whether it worked. Never ask for the code in any other form. If a bare code reaches you anyway, do not use or repeat it; ask for a fresh code in the form above.
 
-Alternative when the owner is at the host: `docker exec -it nano t3code-connect pair --access <level>`, then paste the code at the prompt.
+Alternative when the owner is at the host: `docker exec -it nano /app/packs/t3code/bin/t3code-connect pair --access <level>`, then paste the code at the prompt.
 
 ## 4. Confirm
 Run `t3code-connect status`. Tell the owner in one line that Nano is connected, with which access level, and until when. T3 Code's tools become available with their next message.

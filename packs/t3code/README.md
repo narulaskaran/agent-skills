@@ -50,7 +50,7 @@ For an MCP client, T3 Code builds `link` from the origin the client connected to
 1. Add `mcp` and `t3code` to `NANO_PACKS` and copy the settings you need from `env.example` into `.env`, at least `NANO_T3CODE_WEB_URL`. Restart Nano.
 2. Connect once, using one of these:
    - **Over chat:** text Nano "connect to T3 Code". It walks you through steps 3 to 5 below.
-   - **On the host:** `docker exec -it nano t3code-connect pair --access approval-required` and paste the code from step 3.
+   - **On the host:** `docker exec -it nano /app/packs/t3code/bin/t3code-connect pair --access approval-required` and paste the code from step 3. `docker exec` does not inherit the pack commands Nano adds to its own PATH.
 3. On the T3 Code machine, create a pairing code (single use, valid for 5 minutes):
    ```bash
    t3 pair --scope orchestration:read --scope orchestration:operate --label Nano
