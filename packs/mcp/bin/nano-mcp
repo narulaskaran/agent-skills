@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# `pi mcp` against Nano's own mcp.json: nano-mcp list | add | remove (see the mcp skill).
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+app="$(cd "$here/../../.." && pwd)"
+export PI_CODING_AGENT_DIR="${PI_CODING_AGENT_DIR:-${NANO_DATA_DIR:-$app/data}/pi}"
+exec node "$app/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js" mcp "$@"

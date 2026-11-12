@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "t3code": {
+      "url": "http://127.0.0.1:4096/mcp",
+      "headers": { "Authorization": "!jq -r '\"Bearer \" + .token' /data/t3code/credentials.json" },
+      "exposure": "hidden",
+      "toolExposure": {
+        "t3_project_list": "deferred",
+        "t3_project_read": "deferred",
+        "t3_thread_search": "deferred",
+        "t3_thread_list": "deferred",
+        "t3_thread_read": "deferred",
+        "t3_thread_launch": "deferred",
+        "t3_thread_send": "deferred",
+        "t3_thread_interrupt": "deferred"
+      },
+      "description": "T3 Code, the owner's coding-agent app: list projects, start coding threads, check on them and read their results"
+    }
+  }
+}
