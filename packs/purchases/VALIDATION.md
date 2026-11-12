@@ -19,7 +19,7 @@ Stripe's validator starts a local test seller and prints one task per payment ch
 The seller listens on `127.0.0.1` only and rejects any other `Host`, so the agent's browser and `curl` must share its network namespace. The validator also reads Link through `link-cli` on its PATH, so it must use the same login as the agent. Running it inside the Nano container covers both. Each task needs its own conversation; `test/validate.sh` gives each one a separate Nano process on the stdin channel with a fresh data directory, all sharing one Link login.
 
 ## Procedure
-Use a throwaway container, never the one serving the owner. `<env-file>` holds the model key.
+Use a throwaway container, never the one serving the owner. `<env-file>` holds the model key. The runner refuses live Stripe keys and gives each task its own profile, knowledge base and Pi settings, with only the `core` and `purchases` packs enabled. This overrides any personal paths or packs inherited from the deployment environment.
 
 ```sh
 docker build -t nano:dev .

@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/*.test.ts packs/*/test/*.test.ts"
+    "test": "node --test test/*.test.ts packs/*/test/*.test.ts packs/*/test/*.test.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "1.5.2",
