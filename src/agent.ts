@@ -133,6 +133,11 @@ export class Conversation {
 	private readonly modelRuntime: ModelRuntime;
 	private readonly scheduler: Scheduler;
 	private readonly tasks: TaskManager;
+	/**
+	 * When an owner message arrives after the idle gap, the moment it arrived. Recording the message
+	 * moves lastActivity to now, so the gap has to be noticed before that, not in ensureSession.
+	 */
+	private rolloverAt?: number;
 
 	constructor(
 		spaceId: string,
@@ -193,6 +198,7 @@ export class Conversation {
 			.map((f) => ({ type: "image" as const, data: readFileSync(f.path).toString("base64"), mimeType: f.mimeType }));
 		const fileNotes = files.map((f) => `[${f.kind} received: ${f.path}]`).join("\n");
 		const spoken = [body, fileNotes].filter(Boolean).join("\n");
+		if (isIdle(this.state.lastActivity, this.config.idleHours)) this.rolloverAt ??= Date.now();
 		this.record("owner", spoken);
 
 		// A message that lands mid-run steers the run instead of waiting behind it.
@@ -230,7 +236,9 @@ export class Conversation {
 	}
 
 	private async ensureSession(): Promise<{ session: AgentSession; carry: string }> {
-		const idle = isIdle(this.state.lastActivity, this.config.idleHours);
+		const cutoff = this.rolloverAt ?? (isIdle(this.state.lastActivity, this.config.idleHours) ? Date.now() : undefined);
+		this.rolloverAt = undefined;
+		const idle = cutoff !== undefined;
 		if (this.session && !idle) return { session: this.session, carry: "" };
 		if (this.session) await this.dispose();
 
@@ -264,7 +272,8 @@ export class Conversation {
 			else if (error) void this.say(`I hit an error talking to the model: ${error.slice(0, 200)}`);
 		});
 		this.session = session;
-		const carry = resume ? "" : carryOver(this.state.recent);
+		// Only what came before the gap: the message that ended it is the prompt itself.
+		const carry = resume ? "" : carryOver(this.state.recent.filter((turn) => cutoff === undefined || turn.at < cutoff));
 		console.error(`nano: ${resume ? "resumed" : "started"} session for ${this.spaceId.slice(-4)} (${session.sessionFile ?? "memory"})`);
 		return { session, carry };
 	}
