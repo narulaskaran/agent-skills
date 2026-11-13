@@ -38,7 +38,7 @@ The daemon is started by `start-root.sh` while the entrypoint is still root, the
 
 ## Portal
 
-A small HTTP server in the daemon, for the owner, on a tailnet address. It lists entries, and can add, replace, or delete them. It never shows a password or a TOTP seed again. An API key shows its last four characters. Blank secret fields on edit keep the current value.
+A small HTTP server in the daemon, for the owner, on a tailnet address. It lists entries, and can add, replace, or delete them. It never shows a password or a TOTP seed again. An API key shows its last four characters. Blank secret fields on edit keep the current value. The Credentials page keeps **website logins** (the browser signs in for you) apart from **API keys** (a header sent to listed hosts); model providers use their own key under Providers. The pages work on phones and desktops without scripts.
 
 It binds to the explicit comma-separated addresses in `NANO_VAULT_BIND`, or else the first local IPv4 address in Tailscale's CGNAT range. It does not fall back to every interface or to loopback. A connection is accepted only when its remote address is inside `NANO_VAULT_ALLOW` (that same range, by default), is not one of this machine's own addresses, and is not loopback. `X-Forwarded-For` is ignored. Requests whose `Host` is not the bind address (or a name in `NANO_VAULT_HOSTS`) are refused, and every POST needs an `Origin` matching `Host` plus a CSRF token.
 

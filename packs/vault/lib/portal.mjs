@@ -4,49 +4,151 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { connectionAllowed, inTailscale } from "./net.mjs";
-import { providerPage, providerPost, settingsNav } from "./provider-pages.mjs";
+import { check, csrf, esc, field, hidden, notice, providerPage, providerPost, sectionFor, sectionTitle, settingsNav } from "./provider-pages.mjs";
 import { publicEntry } from "./store.mjs";
 
 const MAX_BODY = 64 * 1024;
 
-const PAGE = `<!doctype html>
+const STYLE = `
+  :root { color-scheme: dark; --bg: #0d0f13; --bar: #11141a; --panel: #161920; --line: #2a2f3b; --line-strong: #3d4454; --text: #edebe6; --text-2: #cbc7bf; --muted: #a39f97; --link: #a9c0ff; --focus: #a9c0ff; --login: #7fdcc7; --key: #f2c27a; --ok: #8fe0b0; --bad: #ffb4ab; --radius: 14px; }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-bottom: 6rem; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--link); text-underline-offset: 0.18em; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .skip { position: absolute; left: 0.75rem; top: -4rem; background: var(--text); color: #15171c; padding: 0.6rem 1rem; border-radius: 10px; z-index: 5; }
+  .skip:focus { top: 0.75rem; }
+  .bar { background: var(--bar); border-bottom: 1px solid var(--line); }
+  .bar-in { max-width: 62rem; margin: 0 auto; padding: 0.6rem 1rem; display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 1.25rem; }
+  .brand { font-weight: 650; font-size: 1.1rem; letter-spacing: -0.02em; color: var(--text); text-decoration: none; padding: 0.4rem 0; }
+  nav { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-left: auto; }
+  nav a { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0.4rem 1rem; border-radius: 999px; color: var(--text-2); text-decoration: none; font-weight: 500; }
+  nav a:hover { background: #1c202a; color: var(--text); }
+  nav a[aria-current="page"] { background: #2b3141; color: var(--text); font-weight: 650; box-shadow: inset 0 -2px 0 var(--link); }
+  main { max-width: 62rem; margin: 0 auto; padding: 1.75rem 1rem 4rem; }
+  .narrow { max-width: 40rem; }
+  h1 { font-size: 1.7rem; line-height: 1.2; font-weight: 650; letter-spacing: -0.03em; margin: 0 0 0.4rem; }
+  h2 { font-size: 1.15rem; font-weight: 620; letter-spacing: -0.015em; margin: 0 0 0.6rem; }
+  h3 { font-size: 1.02rem; font-weight: 620; margin: 0; overflow-wrap: anywhere; }
+  p { margin: 0 0 0.8rem; color: var(--text-2); }
+  .page-head { margin-bottom: 1.5rem; }
+  .lede { color: var(--muted); max-width: 42rem; margin: 0; }
+  main > section + section { margin-top: 2rem; }
+  .section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.4rem; }
+  .section-head h2 { margin: 0; }
+  .hint { margin: 0.35rem 0 0; color: var(--muted); font-size: 0.9rem; line-height: 1.45; max-width: 44rem; }
+  .section-note { margin: 0 0 0.9rem; color: var(--muted); font-size: 0.92rem; }
+  .cards, .tiles, .jobs { display: grid; gap: 0.85rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr)); align-items: start; }
+  .jobs { grid-template-columns: repeat(auto-fit, minmax(min(100%, 21rem), 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem 1.1rem; min-width: 0; }
+  .entry.login { border-top: 3px solid var(--login); }
+  .entry.key { border-top: 3px solid var(--key); }
+  .card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.35rem 0.75rem; margin-bottom: 0.5rem; }
+  .card-head h2 { margin: 0; font-size: 1.05rem; }
+  .card p { margin: 0 0 0.35rem; overflow-wrap: anywhere; }
+  .card p.hint { margin: 0.35rem 0 0; }
+  .card .where { color: var(--text); font-weight: 500; }
+  .card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.75rem; margin-top: 0.6rem; }
+  .card-actions form { margin: 0; }
+  .act { display: inline-flex; align-items: center; min-height: 44px; padding: 0 0.35rem; }
+  .act.warn { color: var(--bad); }
+  .badge { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.12rem 0.65rem; border: 1px solid var(--line-strong); border-radius: 999px; font-size: 0.78rem; font-weight: 600; line-height: 1.5; color: var(--text-2); max-width: 100%; overflow-wrap: anywhere; }
+  .badge::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; flex: none; }
+  .badge.login { color: var(--login); border-color: #2d5b50; }
+  .badge.key { color: var(--key); border-color: #655028; }
+  .badge.on { color: var(--ok); border-color: #2d5f43; }
+  .badge.off { color: var(--muted); }
+  .badge.local { color: var(--ok); border-color: #2d5f43; }
+  .badge.hosted { color: var(--text-2); }
+  .facts { list-style: none; margin: 0 0 0.35rem; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; color: var(--text-2); }
+  .facts li { overflow-wrap: anywhere; }
+  .facts .ok { color: var(--ok); }
+  .mono, .url { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.86rem; }
+  .url { color: var(--text-2); overflow-wrap: anywhere; }
+  .meta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.25rem 0.9rem; margin: 0.6rem 0 0; font-size: 0.92rem; }
+  .meta dt { color: var(--muted); }
+  .meta dd { margin: 0; overflow-wrap: anywhere; }
+  .chip { display: inline-block; padding: 0 0.5rem; margin: 0 0.15rem 0.15rem 0; border-radius: 6px; background: #232836; font-size: 0.82rem; }
+  .empty { border: 1px dashed var(--line-strong); border-radius: var(--radius); padding: 1rem 1.1rem; color: var(--muted); }
+  .empty p { color: var(--muted); }
+  .empty .btn { margin-top: 0.4rem; }
+  .tile { display: block; padding: 0.9rem 1rem; min-height: 44px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; color: var(--text); text-decoration: none; }
+  .tile b { display: block; font-weight: 620; }
+  .tile span { display: block; color: var(--muted); font-size: 0.88rem; margin-top: 0.15rem; }
+  .tile:hover { border-color: var(--link); }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 0.3rem; padding: 0.3rem; margin: 0 0 1.5rem; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; }
+  .seg a { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 0.5rem; border-radius: 999px; color: var(--text-2); text-decoration: none; font-weight: 550; text-align: center; }
+  .seg a[aria-current="page"] { background: #2b3141; color: var(--text); font-weight: 650; }
+  .panel { margin-bottom: 1rem; }
+  .panel > h2, fieldset legend { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 650; margin: 0 0 0.8rem; padding: 0; }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+  legend { float: left; width: 100%; } legend + * { clear: both; }
+  .field { margin: 0 0 1rem; }
+  .field label:not(.check) { display: block; margin-bottom: 0.35rem; font-weight: 550; font-size: 0.95rem; }
+  input, select, textarea { display: block; width: 100%; min-height: 46px; font: inherit; font-size: 1rem; color: var(--text); background: #0b0d11; border: 1px solid var(--line-strong); border-radius: 12px; padding: 0.65rem 0.85rem; }
+  input::placeholder { color: #6f6c66; }
+  input:focus, select:focus, textarea:focus { border-color: var(--focus); }
+  input[readonly] { color: var(--muted); background: #12151b; }
+  textarea { min-height: 6rem; resize: vertical; }
+  textarea.mono { min-height: 12rem; line-height: 1.45; }
+  .field:has(> .check) { margin-bottom: 0.15rem; }
+  .check { display: flex; align-items: flex-start; gap: 0.7rem; min-height: 44px; padding: 0.55rem 0; cursor: pointer; }
+  input[type="checkbox"] { width: 1.3rem; height: 1.3rem; min-height: 0; margin: 0.1rem 0 0; padding: 0; flex: none; accent-color: var(--link); }
+  .field .check + .hint { margin-top: -0.2rem; padding-left: 2rem; }
+  details { margin-top: 0.9rem; border-top: 1px solid var(--line); }
+  summary { display: flex; align-items: center; gap: 0.6rem; min-height: 44px; cursor: pointer; font-weight: 550; color: var(--text-2); list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: ""; width: 0.45rem; height: 0.45rem; margin: 0 0.15rem; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); flex: none; }
+  details[open] > summary::before { transform: rotate(45deg); }
+  summary:hover { color: var(--text); }
+  details > .hint:first-of-type { margin-bottom: 0.9rem; }
+  .sub { margin-top: 0.4rem; padding-top: 0.9rem; border-top: 1px dashed var(--line); }
+  .sub h3 { margin-bottom: 0.2rem; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 1.25rem; }
+  button, .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0.6rem 1.3rem; font: inherit; font-weight: 620; line-height: 1.2; text-align: center; color: #15171c; background: #f2f0ea; border: 1px solid transparent; border-radius: 999px; text-decoration: none; cursor: pointer; }
+  button:hover, .btn:hover { background: #fff; }
+  button.ghost, .btn.ghost { color: var(--text); background: transparent; border-color: var(--line-strong); }
+  button.ghost:hover, .btn.ghost:hover { background: #1c202a; }
+  button.danger { color: var(--bad); background: transparent; border-color: #6d3d42; }
+  button.danger:hover { background: #2c1a1d; }
+  button.danger.solid { color: #2e0f0c; background: var(--bad); border-color: transparent; }
+  .danger-zone { margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
+  .savebar { position: sticky; bottom: 0; margin: 1.25rem -1rem 0; padding: 0.75rem 1rem; background: rgba(13, 15, 19, 0.94); border-top: 1px solid var(--line); z-index: 2; }
+  .notice { margin: 0 0 1.25rem; padding: 0.8rem 1rem; border: 1px solid; border-radius: 12px; overflow-wrap: anywhere; }
+  .notice.success { color: #d5f3e1; background: #13291d; border-color: #2d6445; }
+  .notice.error { color: #ffdad7; background: #351c1f; border-color: #7b3b41; }
+  @media (prefers-reduced-motion: no-preference) { button, .btn, nav a, .tile, input, select, textarea { transition: background-color 0.15s, border-color 0.15s, color 0.15s; } }
+  @media (max-width: 40rem) {
+    .bar-in { padding: 0.4rem 0.75rem 0.6rem; }
+    nav { width: 100%; margin-left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    nav a { padding: 0.35rem 0.3rem; font-size: 0.92rem; text-align: center; line-height: 1.2; }
+    main { padding: 1.25rem 0.85rem 3rem; }
+    h1 { font-size: 1.45rem; }
+    .actions > button, .actions > .btn { flex: 1 1 100%; }
+    .savebar { margin-left: -0.85rem; margin-right: -0.85rem; padding-left: 0.85rem; padding-right: 0.85rem; }
+    .section-head .btn { flex: 1 1 100%; }
+  }
+`;
+
+function page({ title, nav, content }) {
+	return `<!doctype html>
 <html lang="en">
+<head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vault</title>
-<style>
-  :root { color-scheme: dark; }
-  body { margin: 0; background: #101114; color: #eceae6; font: 17px/1.45 system-ui, sans-serif; }
-  main { max-width: 28rem; margin: 0 auto; padding: 1.25rem 1rem 3rem; }
-  h1 { font-size: 1.45rem; font-weight: 620; letter-spacing: -0.03em; margin: 0 0 0.25rem; }
-  a { color: #b7c9ff; }
-  p, li { color: #c8c4bc; }
-  .muted { color: #9b978f; font-size: 0.92rem; }
-  .card { background: #1b1e27; border-radius: 14px; padding: 0.95rem 1rem; margin: 0.7rem 0; }
-  .card b { font-weight: 600; }
-  label { display: block; margin: 0.85rem 0; }
-  label span { display: block; margin-bottom: 0.3rem; color: #b8b4ac; font-size: 0.92rem; }
-  input, textarea { width: 100%; box-sizing: border-box; font: inherit; color: inherit; background: #0e1014; border: 1px solid #343844; border-radius: 12px; padding: 0.75rem 0.8rem; }
-  nav { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-  fieldset { border: 1px solid #343844; border-radius: 14px; margin: 1.25rem 0; padding: 1rem; }
-  legend { padding: 0 .4rem; font-weight: 600; }
-  select { width: 100%; font: inherit; color: inherit; background: #0e1014; padding: .65rem; border: 1px solid #343844; border-radius: 10px; }
-  .success { background: #18392b; padding: .8rem; border-radius: 12px; }
-  label.check { display: flex; gap: .6rem; align-items: center; }
-  label.check input { width: auto; }
-  .card form { margin-top: .8rem; }
-  textarea { min-height: 5.5rem; resize: vertical; }
-  .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
-  button, .btn { font: inherit; border: 0; border-radius: 999px; padding: 0.75rem 1.15rem; background: #f2f0ea; color: #16181d; text-decoration: none; display: inline-block; }
-  button.quiet, a.quiet { background: transparent; color: #ffb4ab; padding-left: 0; }
-  .error { background: #3a2426; color: #ffd7d4; border-radius: 12px; padding: 0.7rem 0.85rem; }
-  form.check label { display: flex; gap: 0.55rem; align-items: center; }
-  form.check input { width: auto; }
-</style>
-<main>
-CONTENT
+<title>${esc(title)} · Vault</title>
+<style>${STYLE}</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="bar"><div class="bar-in"><a class="brand" href="/">Vault</a>${nav}</div></header>
+<main id="main">
+${content}
 </main>
+</body>
 </html>`;
+}
 
 export function hostHeaderAllowed(header, { bind, port, names }) {
 	if (!header || /[\s,]/.test(header)) return false;
@@ -112,8 +214,8 @@ async function handle(req, res, options) {
 	const form = await readForm(req);
 	if (!token || !safeEqual(token, form.csrf)) return bare(res, 403);
 	const outcome = await providerPost(url.pathname, form, options) ?? await post(url.pathname, form, options);
-	if (outcome.content) return send(res, layout(outcome.content), false, token);
-	if (outcome.error) return send(res, layout(`<p class="error">${esc(outcome.error)}</p>${outcome.form}`), false, token);
+	if (outcome.content) return send(res, layout(outcome.content, url.pathname), false, token);
+	if (outcome.error) return send(res, layout(`${notice("error", outcome.error)}${outcome.form}`, url.pathname), false, token);
 	if (outcome.event) options.log?.(outcome.event);
 	return send(res, await pageFor(new URL("/", "http://vault"), options, token), false, token);
 }
@@ -137,14 +239,16 @@ function csrfCookie(req) {
 
 async function pageFor(url, options, token) {
 	const settings = await providerPage(url, options, token);
-	if (settings !== null) return layout(settings);
+	if (settings !== null) return layout(settings, url.pathname);
 	const entries = options.read().entries.map(publicEntry);
-	if (url.pathname === "/") return layout(listPage(entries));
-	if (url.pathname === "/login/new") return layout(loginForm(token, { site: url.searchParams.get("site") ?? "" }));
-	if (url.pathname === "/key/new") return layout(keyForm(token, {}));
-	if (url.pathname === "/edit") return layout(editPage(entries, url.searchParams.get("name") ?? "", token));
-	if (url.pathname === "/delete") return layout(deletePage(entries, url.searchParams.get("name") ?? "", token));
-	return layout(`<p class="error">That page does not exist.</p><p><a href="/">Back</a></p>`);
+	const name = url.searchParams.get("name") ?? "";
+	const at = (content) => layout(content, url.pathname);
+	if (url.pathname === "/") return at(listPage(entries));
+	if (url.pathname === "/login/new") return at(loginForm(token, { site: url.searchParams.get("site") ?? "" }));
+	if (url.pathname === "/key/new") return at(keyForm(token, {}));
+	if (url.pathname === "/edit") return at(editPage(entries, name, token));
+	if (url.pathname === "/delete") return at(deletePage(entries, name, token));
+	return at(`${notice("error", "That page does not exist.")}<p><a href="/">Back to credentials</a></p>`);
 }
 
 async function post(pathname, form, options) {
@@ -169,33 +273,51 @@ async function post(pathname, form, options) {
 	} catch (error) {
 		const message = error?.message ?? "could not save";
 		const token = form.csrf;
-		const rebuilt = pathname.includes("key") ? keyForm(token, { ...form, key: "" }) : loginForm(token, { ...form, password: "", totp: "" });
+		const editing = pathname === "/edit" || pathname === "/key/edit";
+		const rebuilt = pathname.includes("key")
+			? keyForm(token, { ...form, key: "" }, { action: pathname, editing })
+			: loginForm(token, { ...form, password: "", totp: "" }, { action: pathname, editing });
 		return { error: message, form: rebuilt };
 	}
 }
 
+const when = (iso) => String(iso ?? "").slice(0, 10);
+
+function section(id, title, note, add, items, empty) {
+	return `<section aria-labelledby="${id}-h">
+<div class="section-head"><h2 id="${id}-h">${title}</h2><a class="btn ghost" href="${add.href}">${add.label}</a></div>
+<p class="section-note">${note}</p>
+${items.length ? `<div class="cards">${items.join("")}</div>` : `<div class="empty"><p>${empty}</p></div>`}
+</section>`;
+}
+
 function listPage(entries) {
-	const rows = entries.length === 0 ? `<p class="muted">Nothing saved yet.</p>` : entries.map(row).join("");
-	return `<h1>Vault</h1>
-<p class="muted">Write-only. A password or one-time-code seed is never shown again. An API key shows its last four characters.</p>
-${rows}
-<div class="actions"><a class="btn" href="/login/new">Add login</a><a class="btn" href="/key/new">Add API key</a></div>`;
+	const logins = entries.filter((entry) => entry.kind === "login");
+	const keys = entries.filter((entry) => entry.kind !== "login");
+	return `<header class="page-head"><h1>Credentials</h1>
+<p class="lede">Write-only. A password or one-time-code seed is never shown again. An API key shows its last four characters.</p></header>
+${section("logins", "Website logins", "A username and password (with optional 2FA) Nano uses to sign in to a website in the browser, such as a DeepSeek account.", { href: "/login/new", label: "Add website login" }, logins.map(row), "No website logins yet.")}
+${section("keys", "API keys", `A secret sent to a service as a request header. To use a model provider such as DeepSeek for chat, add its key under <a href="/providers">Providers</a> instead.`, { href: "/key/new", label: "Add API key" }, keys.map(row), "No API keys yet.")}`;
 }
 
 function row(entry) {
-	const where = entry.kind === "login" ? esc(entry.site) : esc((entry.hosts ?? []).join(", "));
-	const extra = entry.kind === "login"
-		? `${esc(entry.username)}${entry.totp ? " · 2FA saved" : ""}`
-		: `key •••• ${esc(entry.keyLast4)} · ${esc(entry.header)}`;
-	return `<article class="card"><b>${esc(entry.name)}</b> <span class="muted">${esc(entry.kind)}</span>
-<p>${where}</p><p>${extra}</p>
-<p class="muted">Updated ${esc(entry.updatedAt ?? "")}</p>
-<p><a href="/edit?name=${encodeURIComponent(entry.name)}">Edit</a> · <a href="/delete?name=${encodeURIComponent(entry.name)}">Delete</a></p></article>`;
+	const login = entry.kind === "login";
+	const where = login ? esc(entry.site) : esc((entry.hosts ?? []).join(", "));
+	const facts = login
+		? `<li>${esc(entry.username)}</li>${entry.totp ? `<li class="ok">2FA saved</li>` : ""}`
+		: `<li class="mono">key •••• ${esc(entry.keyLast4)}</li><li>${esc(entry.header)}</li>`;
+	const href = encodeURIComponent(entry.name);
+	return `<article class="card entry ${login ? "login" : "key"}">
+<div class="card-head"><h3>${esc(entry.name)}</h3><span class="badge ${login ? "login" : "key"}">${login ? "Website login" : "API key"}</span></div>
+<p class="where">${where}</p>
+<ul class="facts">${facts}</ul>
+<p class="hint">Updated ${esc(when(entry.updatedAt))}</p>
+<div class="card-actions"><a class="act" href="/edit?name=${href}">Edit<span class="sr"> ${esc(entry.name)}</span></a><a class="act warn" href="/delete?name=${href}">Delete<span class="sr"> ${esc(entry.name)}</span></a></div></article>`;
 }
 
 function editPage(entries, name, token) {
 	const entry = entries.find((item) => item.name === name);
-	if (!entry) return `<p class="error">No entry named ${esc(name)}.</p><p><a href="/">Back</a></p>`;
+	if (!entry) return `${notice("error", `No entry named ${name}.`)}<p><a href="/">Back to credentials</a></p>`;
 	if (entry.kind === "api-key") {
 		return keyForm(token, { ...entry, hosts: (entry.hosts ?? []).join("\n"), key: "" }, { action: "/key/edit", editing: true });
 	}
@@ -204,53 +326,70 @@ function editPage(entries, name, token) {
 
 function deletePage(entries, name, token) {
 	const entry = entries.find((item) => item.name === name);
-	if (!entry) return `<p class="error">No entry named ${esc(name)}.</p>`;
-	return `<h1>Delete ${esc(entry.name)}</h1>
-<p>This removes the ${esc(entry.kind)} and cannot be undone.</p>
-<form method="post" action="/delete">
-<input type="hidden" name="csrf" value="${esc(token)}">
-<input type="hidden" name="name" value="${esc(entry.name)}">
-<div class="actions"><button type="submit">Delete</button><a class="quiet" href="/">Cancel</a></div>
-</form>`;
+	if (!entry) return `${notice("error", `No entry named ${name}.`)}<p><a href="/">Back to credentials</a></p>`;
+	return `<header class="page-head"><h1>Delete ${esc(entry.name)}</h1>
+<p class="lede">This removes the ${esc(entry.kind)} and cannot be undone.</p></header>
+<div class="narrow"><form method="post" action="/delete">
+${csrf(token)}
+${hidden("name", entry.name)}
+<div class="actions"><button class="danger solid" type="submit">Delete</button><a class="btn ghost" href="/">Cancel</a></div>
+</form></div>`;
+}
+
+// Website login and API key are different things; the switch makes the choice explicit.
+function kindSwitch(active) {
+	const item = (id, href, label) => `<a href="${href}"${id === active ? ' aria-current="page"' : ""}>${label}</a>`;
+	return `<div class="seg" role="group" aria-label="Credential type">${item("login", "/login/new", "Website login")}${item("key", "/key/new", "API key")}</div>`;
 }
 
 function loginForm(token, values, { action = "/login/new", editing = false } = {}) {
-	return `<h1>${editing ? "Edit login" : "Add login"}</h1>
-<p class="muted">${editing ? "Leave a secret blank to keep the saved one." : "The password and the one-time-code seed are not shown after you save."}</p>
+	const lede = editing
+		? "Leave a secret blank to keep the saved one."
+		: "For a website Nano signs in to through the browser, such as a DeepSeek account. The password and the one-time-code seed are not shown after you save.";
+	return `<header class="page-head"><h1>${editing ? "Edit website login" : "Add website login"}</h1><p class="lede">${lede}</p></header>
+<div class="narrow">${editing ? "" : kindSwitch("login")}
 <form method="post" action="${action}" autocomplete="off">
-<input type="hidden" name="csrf" value="${esc(token)}">
-${field("Name", "name", values.name, editing ? "text" : "text", editing)}
-${field("Site", "site", values.site)}
-${field("Username", "username", values.username)}
-${field("Password", "password", "", "password")}
-${field("One-time code seed or otpauth URI", "totp", "", "password")}
-${editing ? `<label class="check"><input type="checkbox" name="removeTotp" value="yes"> Remove saved 2FA</label>` : ""}
-<div class="actions"><button type="submit">Save</button><a class="quiet" href="/">Cancel</a></div>
-</form>`;
+${csrf(token)}
+<section class="card panel"><h2>Account</h2>
+${field("Name", "name", values.name, { locked: editing, placeholder: "deepseek-web", hint: editing ? "" : "A short label you and Nano use to find this login." })}
+${field("Site", "site", values.site, { placeholder: "platform.deepseek.com", hint: "Use the exact hostname where you sign in. Nano only signs in on this site." })}
+${field("Username", "username", values.username, { hint: "Usually your email address." })}
+${field("Password", "password", "", { type: "password", autocomplete: "new-password" })}
+</section>
+<section class="card panel"><h2>Two-step verification</h2>
+${field("One-time code seed or otpauth URI", "totp", "", { type: "password", autocomplete: "new-password", hint: "Optional. Only needed if the account uses an authenticator app." })}
+${editing ? check("Remove saved 2FA", "removeTotp", false) : ""}
+</section>
+<div class="actions"><button type="submit">Save</button><a class="btn ghost" href="/">Cancel</a></div>
+</form></div>`;
 }
 
 function keyForm(token, values, { action = "/key/new", editing = false } = {}) {
-	const last4 = editing && values.keyLast4 ? `<p class="muted">Current key ends in ${esc(values.keyLast4)}. Leave the field blank to keep it.</p>` : "";
-	return `<h1>${editing ? "Edit API key" : "Add API key"}</h1>
-${last4}
+	const last4 = editing && values.keyLast4 ? `Current key ends in ${values.keyLast4}. Leave the field blank to keep it.` : "";
+	const lede = editing
+		? "Edit where this key is sent and how it is attached."
+		: "A secret Nano attaches to requests for the hosts you list. To use a model provider for chat, add its key under Providers instead.";
+	const customHeader = (values.header !== undefined && values.header !== "Authorization") || (values.prefix !== undefined && values.prefix !== "Bearer ");
+	return `<header class="page-head"><h1>${editing ? "Edit API key" : "Add API key"}</h1><p class="lede">${lede}</p></header>
+<div class="narrow">${editing ? "" : kindSwitch("key")}
 <form method="post" action="${action}" autocomplete="off">
-<input type="hidden" name="csrf" value="${esc(token)}">
-${field("Name", "name", values.name, "text", editing)}
-<label><span>Hosts, one per line. Start a line with *. to include subdomains.</span><textarea name="hosts">${esc(values.hosts ?? "")}</textarea></label>
+${csrf(token)}
+<section class="card panel"><h2>Key</h2>
+${field("Name", "name", values.name, { locked: editing, placeholder: "example-api" })}
+<div class="field"><label for="f-hosts">Hosts</label><textarea id="f-hosts" name="hosts" aria-describedby="h-hosts" autocapitalize="none" spellcheck="false" placeholder="api.example.com">${esc(values.hosts ?? "")}</textarea><p class="hint" id="h-hosts">One per line. Start a line with *. to include subdomains.</p></div>
+${field("Key", "key", "", { type: "password", autocomplete: "new-password", hint: last4 })}
+</section>
+<details${customHeader ? " open" : ""}><summary>Advanced: how the key is sent</summary>
 ${field("Header name", "header", values.header || "Authorization")}
-${field("Header prefix", "prefix", values.prefix === undefined ? "Bearer " : values.prefix)}
-${field("Key", "key", "", "password")}
-<div class="actions"><button type="submit">Save</button><a class="quiet" href="/">Cancel</a></div>
-</form>`;
+${field("Header prefix", "prefix", values.prefix === undefined ? "Bearer " : values.prefix, { hint: "Added before the key, for example Bearer followed by a space." })}
+</details>
+<div class="actions"><button type="submit">Save</button><a class="btn ghost" href="/">Cancel</a></div>
+</form></div>`;
 }
 
-function field(label, name, value, type = "text", locked = false) {
-	const readonly = locked ? " readonly" : "";
-	return `<label><span>${esc(label)}</span><input name="${esc(name)}" type="${type}" autocomplete="off" value="${esc(value ?? "")}"${readonly}></label>`;
-}
-
-function layout(content) {
-	return PAGE.replace("CONTENT", settingsNav + content);
+function layout(content, pathname = "/") {
+	const active = sectionFor(pathname);
+	return page({ title: sectionTitle(active), nav: settingsNav(active), content });
 }
 
 function send(res, html, head, token) {
@@ -313,8 +452,4 @@ function splitHost(host) {
 	if (index === -1) return { name: host, port: "" };
 	if (host.indexOf(":") !== index) return null;
 	return { name: host.slice(0, index), port: host.slice(index + 1) };
-}
-
-function esc(value) {
-	return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
