@@ -400,8 +400,9 @@ export function createBrowserHost(options = {}) {
 		for (const lock of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) rmSync(join(profileDir, lock), { force: true });
 		context = await chromium.launchPersistentContext(profileDir, {
 			headless: true,
-			// --site-per-process: the headless shell otherwise keeps cross-origin iframes in-process,
-			// and WebMCP then does not report tools registered inside them (Stripe's frames).
+			// Use full Chromium's current headless mode rather than the separate headless shell.
+			channel: "chromium",
+			// Give cross-origin frames separate CDP targets so WebMCP can discover their tools.
 			args: ["--enable-features=WebMCP,WebMCPTesting,DevToolsWebMCPSupport", "--site-per-process", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
 			viewport: { width: 1280, height: 900 },
 			userAgent: userAgent(),

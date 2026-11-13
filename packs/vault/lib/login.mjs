@@ -65,7 +65,7 @@ async function report(page, { submitted, passwordLeft, otpRequested, otpFilled, 
 		note ?? "",
 		`url: ${page.url()}`,
 		`title: ${title}`,
-		passwordLeft ? "password field still present (login may have failed)" : "no password field",
+		passwordLeft ? "password field still present; check for a verification dialog or login error" : "no password field; confirm the authenticated account page",
 	];
 	if (otpRequested && !otpFilled) lines.push("verification code required; no authenticator seed saved. For email verification, use the configured inbox to retrieve a fresh code");
 	if (otpFilled) lines.push("one-time code submitted");

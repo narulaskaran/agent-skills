@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs as root when the image is built. Adds:
-# - Chromium's headless shell via playwright-core, with only the shared libraries it links against
+# - Full Chromium via playwright-core, running in its current headless mode
 # - the Stripe Link CLI
-# Both are pinned: each ships breaking changes. Adds about 430 MB (150 MB compressed) to the image.
+# Both are pinned: each ships breaking changes.
 set -euo pipefail
 
 PLAYWRIGHT_VERSION=1.65.0
@@ -17,7 +17,7 @@ apt-get install -y --no-install-recommends \
 rm -rf /var/lib/apt/lists/*
 
 npm install --prefix /opt/nano-browser --omit=dev --ignore-scripts --no-audit --no-fund "playwright-core@$PLAYWRIGHT_VERSION"
-PLAYWRIGHT_BROWSERS_PATH=/opt/nano-browser/browsers /opt/nano-browser/node_modules/.bin/playwright-core install --only-shell chromium
+PLAYWRIGHT_BROWSERS_PATH=/opt/nano-browser/browsers /opt/nano-browser/node_modules/.bin/playwright-core install --no-shell chromium
 # ffmpeg is only used for video recording.
 rm -rf /opt/nano-browser/browsers/ffmpeg-*
 chmod -R a+rX /opt/nano-browser

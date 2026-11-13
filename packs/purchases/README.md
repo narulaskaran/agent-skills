@@ -5,7 +5,7 @@ Lets Nano buy things online for its owner with their [Stripe Link](https://link.
 Enable it with `NANO_PACKS=core,purchases` and rebuild the image.
 
 ## What it adds
-- `browser`: a headless Chromium the agent drives from the shell. Pages are read as accessibility snapshots with refs (`e12`, or `f1e3` inside an iframe), so it can fill card fields in cross-origin payment frames such as Stripe Elements. It also calls a page's WebMCP tools and fills Stripe's Link Pay Token field. One background browser per data directory keeps a persistent profile under `$NANO_DATA_DIR/browser` and stops after 15 idle minutes. `browser help` lists the commands.
+- `browser`: a headless Chromium the agent drives from the shell. Pages are read as accessibility snapshots with refs (`e12`, or `f1e3` inside an iframe), so it can fill card fields in cross-origin payment frames such as Stripe Elements. It also calls a page's WebMCP tools and fills Stripe's Link Pay Token field. One background browser per data directory keeps a persistent profile under `$NANO_DATA_DIR/browser` and stops after 15 idle minutes by default (`NANO_BROWSER_IDLE_MINUTES=0` disables that timeout). `browser help` lists the commands.
 - `link-cli`: the Stripe Link CLI, pinned, with its login stored in `$NANO_DATA_DIR/link/auth.json` (or `$LINK_AUTH_FILE`).
 - Skills: `purchases` (rules, choosing a payment path, Link commands, checkout, machine payments) and `browser`.
 
@@ -29,12 +29,12 @@ The browser fetches card details from the approved spend request itself. Card nu
 To reuse the login of another link-cli install, copy its `config.json` (from `~/.config/link-cli-nodejs/` on that machine) into the data directory and set `LINK_AUTH_FILE` to it. Refresh tokens rotate, so two installs using one login can sign each other out; a separate login is safer.
 
 ## WebMCP
-The browser launches Chromium with `--enable-features=WebMCP` and `--site-per-process` and talks to the Chrome DevTools `WebMCP` domain, so it lists and calls both declarative tools (`<form toolname>`) and imperative ones (`document.modelContext.registerTool`), including tools registered inside cross-origin iframes. Tested against the local fixture in `test/`: a declarative `purchase` form tool and an imperative tool inside a cross-origin card iframe.
+The browser launches full Chromium in its current headless mode with `--enable-features=WebMCP,WebMCPTesting,DevToolsWebMCPSupport` and `--site-per-process` and talks to the Chrome DevTools `WebMCP` domain, so it lists and calls both declarative tools (`<form toolname>`) and imperative ones (`document.modelContext.registerTool`), including tools registered inside cross-origin iframes. Tested against the local fixture in `test/`: a declarative `purchase` form tool and an imperative tool inside a cross-origin card iframe.
 
-On Stripe's checkout pages the tools (`get_link_pay_token_merchant`, `set_link_pay_token`, `select_payment_method`, `apply_promo_code`) are registered by Stripe.js only when Stripe enables them for the checkout session. On Stripe's public test-mode demo they were not enabled, while the Link Pay Token block they wrap was present and detected, so `browser lpt` covers the same flow without them. Iframe tools need `allow="tools"` on the iframe, and Chromium's headless shell reports them only with `--site-per-process`; both are handled.
+On Stripe's checkout pages the tools (`get_link_pay_token_merchant`, `set_link_pay_token`, `select_payment_method`, `apply_promo_code`) are registered by Stripe.js only when Stripe enables them for the checkout session. On Stripe's public test-mode demo they were not enabled, while the Link Pay Token block they wrap was present and detected, so `browser lpt` covers the same flow without them. Iframe tools need `allow="tools"` on the iframe. The browser uses `--site-per-process` and the required WebMCP feature flags, and iframe discovery/invocation is covered by the local fixture.
 
-## Size
-`install.sh` adds one 433 MB layer (about 150 MB compressed): Chromium's headless shell with `playwright-core` (297 MB), link-cli (85 MB after dropping type definitions and sourcemaps) and the shared libraries Chromium links against. The full Chromium build or Playwright's `--with-deps` would add about 1 GB.
+## Browser installation
+`install.sh` installs the full Chromium build pinned by `playwright-core`, rather than the separate headless shell. Launch uses `channel: "chromium"` so headless operation uses that full browser. This increases the image size in exchange for compatibility with normal web applications. It does not guarantee that every website will accept an automated login. See [BROWSER-NOTES.md](BROWSER-NOTES.md) for the live verification result and its limits.
 
 ## Validation
 [VALIDATION.md](VALIDATION.md) describes running Stripe's validator (`@stripe/link-validate`) against Nano.
