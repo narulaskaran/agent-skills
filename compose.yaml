@@ -9,4 +9,7 @@ services:
       - ./data:/data
       # Credentials. Kept off ./data, which the agent can write.
       - ./vault:/vault
-    mem_limit: 2g
+    # Full Chromium needs more than Docker's 64 MB /dev/shm and a little headroom.
+    shm_size: 1gb
+    mem_limit: 4g
+    memswap_limit: 4g
