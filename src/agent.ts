@@ -4,6 +4,7 @@ import type { AgentSession, ModelRuntime } from "@earendil-works/pi-coding-agent
 import { Type } from "typebox";
 import type { Channel, Inbound } from "./channel.ts";
 import { type Config, currentTimezone, localStamp } from "./config.ts";
+import { refreshProviderSettings } from "./provider-settings.ts";
 import { packExtensions } from "./packs.ts";
 import { buildSystemPrompt } from "./prompt.ts";
 import type { Scheduler } from "./scheduler.ts";
@@ -121,6 +122,7 @@ type Work =
 
 export class Conversation {
 	private session?: AgentSession;
+	private providerRevision?: string;
 	private unsubscribe?: () => void;
 	private pending: Inbound[] = [];
 	private timer?: NodeJS.Timeout;
@@ -236,6 +238,10 @@ export class Conversation {
 	}
 
 	private async ensureSession(): Promise<{ session: AgentSession; carry: string }> {
+		await refreshProviderSettings(this.config, this.modelRuntime);
+		const selected = this.modelRuntime.getModel(this.config.modelProvider, this.config.modelId);
+		if (this.session && selected && (this.session.model?.id !== selected.id || this.session.model?.provider !== selected.provider || this.providerRevision !== this.config.providerRevision)) await this.session.setModel(selected);
+		this.providerRevision = this.config.providerRevision;
 		const cutoff = this.rolloverAt ?? (isIdle(this.state.lastActivity, this.config.idleHours) ? Date.now() : undefined);
 		this.rolloverAt = undefined;
 		const idle = cutoff !== undefined;

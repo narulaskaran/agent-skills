@@ -4,6 +4,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { connectionAllowed, inTailscale } from "./net.mjs";
+import { providerPage, providerPost, settingsNav } from "./provider-pages.mjs";
 import { publicEntry } from "./store.mjs";
 
 const MAX_BODY = 64 * 1024;
@@ -26,6 +27,14 @@ const PAGE = `<!doctype html>
   label { display: block; margin: 0.85rem 0; }
   label span { display: block; margin-bottom: 0.3rem; color: #b8b4ac; font-size: 0.92rem; }
   input, textarea { width: 100%; box-sizing: border-box; font: inherit; color: inherit; background: #0e1014; border: 1px solid #343844; border-radius: 12px; padding: 0.75rem 0.8rem; }
+  nav { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
+  fieldset { border: 1px solid #343844; border-radius: 14px; margin: 1.25rem 0; padding: 1rem; }
+  legend { padding: 0 .4rem; font-weight: 600; }
+  select { width: 100%; font: inherit; color: inherit; background: #0e1014; padding: .65rem; border: 1px solid #343844; border-radius: 10px; }
+  .success { background: #18392b; padding: .8rem; border-radius: 12px; }
+  label.check { display: flex; gap: .6rem; align-items: center; }
+  label.check input { width: auto; }
+  .card form { margin-top: .8rem; }
   textarea { min-height: 5.5rem; resize: vertical; }
   .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
   button, .btn { font: inherit; border: 0; border-radius: 999px; padding: 0.75rem 1.15rem; background: #f2f0ea; color: #16181d; text-decoration: none; display: inline-block; }
@@ -67,6 +76,16 @@ export function chooseBind(configured, addresses) {
 	return addresses.find((address) => inTailscale(address)) ?? null;
 }
 
+// Explicit interfaces only; retain the tailnet-only default.
+export function chooseBinds(configured, addresses) {
+	const value = String(configured ?? "").trim();
+	if (!value) return [chooseBind("", addresses)].filter(Boolean);
+	return [...new Set(value.split(",").map((item) => {
+		if (!item.trim()) throw new Error("NANO_VAULT_BIND contains an empty address");
+		return chooseBind(item, addresses);
+	}))];
+}
+
 export function createPortal(options) {
 	const names = options.hosts ?? [];
 	return http.createServer((req, res) => {
@@ -92,7 +111,8 @@ async function handle(req, res, options) {
 	const token = csrfCookie(req);
 	const form = await readForm(req);
 	if (!token || !safeEqual(token, form.csrf)) return bare(res, 403);
-	const outcome = await post(url.pathname, form, options);
+	const outcome = await providerPost(url.pathname, form, options) ?? await post(url.pathname, form, options);
+	if (outcome.content) return send(res, layout(outcome.content), false, token);
 	if (outcome.error) return send(res, layout(`<p class="error">${esc(outcome.error)}</p>${outcome.form}`), false, token);
 	if (outcome.event) options.log?.(outcome.event);
 	return send(res, await pageFor(new URL("/", "http://vault"), options, token), false, token);
@@ -116,6 +136,8 @@ function csrfCookie(req) {
 }
 
 async function pageFor(url, options, token) {
+	const settings = await providerPage(url, options, token);
+	if (settings !== null) return layout(settings);
 	const entries = options.read().entries.map(publicEntry);
 	if (url.pathname === "/") return layout(listPage(entries));
 	if (url.pathname === "/login/new") return layout(loginForm(token, { site: url.searchParams.get("site") ?? "" }));
@@ -228,7 +250,7 @@ function field(label, name, value, type = "text", locked = false) {
 }
 
 function layout(content) {
-	return PAGE.replace("CONTENT", content);
+	return PAGE.replace("CONTENT", settingsNav + content);
 }
 
 function send(res, html, head, token) {
@@ -236,7 +258,8 @@ function send(res, html, head, token) {
 		"content-type": "text/html; charset=utf-8",
 		"content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'",
 		"cache-control": "no-store",
-		"referrer-policy": "no-referrer",
+		// Preserve Origin on same-origin form POSTs; never send referrers off-site.
+		"referrer-policy": "same-origin",
 		"x-content-type-options": "nosniff",
 	};
 	if (token && !res.getHeader("set-cookie")) headers["set-cookie"] = `vault_csrf=${token}; HttpOnly; SameSite=Strict; Path=/`;

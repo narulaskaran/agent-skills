@@ -3,6 +3,7 @@ import type { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Channel } from "./channel.ts";
 import { type Config, localStamp } from "./config.ts";
+import { refreshProviderSettings } from "./provider-settings.ts";
 import { resolveModel } from "./models.ts";
 import { packExtensions } from "./packs.ts";
 import { buildSystemPrompt } from "./prompt.ts";
@@ -32,7 +33,10 @@ export function bufferedChannel(): { channel: Channel; texts: string[]; files: s
 export function createWorkerRunner(deps: { config: Config; modelRuntime: ModelRuntime; scheduler: Scheduler }): TaskRunner {
 	const { config, modelRuntime, scheduler } = deps;
 	return async (task, signal, update) => {
-		const { model, label, note } = resolveModel(config, modelRuntime, task.role, task.private);
+		await refreshProviderSettings(config, modelRuntime);
+		const chosen = resolveModel(config, modelRuntime, task.role, task.private);
+		const background = task.role === "main" && !task.private && config.background ? modelRuntime.getModel(config.background.provider, config.background.modelId) : undefined;
+		const { model, label, note } = background ? { model: background, label: `background ${background.id}`, note: undefined } : chosen;
 		update({ model: label });
 		const out = bufferedChannel();
 		const session = await createNanoSession({

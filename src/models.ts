@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import { refreshProviderSettings } from "./provider-settings.ts";
 import type { Config } from "./config.ts";
 
 /** Pi provider id under which `NANO_LOCAL_*` is registered. */
@@ -34,6 +35,7 @@ export async function createModelRuntime(config: Config): Promise<ModelRuntime> 
 			],
 		});
 	}
+	await refreshProviderSettings(config, runtime);
 	return runtime;
 }
 
@@ -64,7 +66,7 @@ export function resolveModel(
 	const choice = chooseModel(role, isPrivate, Boolean(config.local));
 	if ("refuse" in choice) throw new Error(choice.refuse);
 	const [provider, id] =
-		choice.use === "local" && config.local ? [LOCAL_PROVIDER, config.local.modelId] : [config.modelProvider, config.modelId];
+		choice.use === "local" && config.local ? [config.local.vault ? "nano-vault-local" : LOCAL_PROVIDER, config.local.modelId] : [config.modelProvider, config.modelId];
 	const model = runtime.getModel(provider, id);
 	if (!model) throw new Error(`Unknown model ${provider}/${id}`);
 	return { model, label: choice.use === "local" ? `local ${id}` : `${provider}/${id}`, note: choice.note };

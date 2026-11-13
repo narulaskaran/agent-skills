@@ -12,7 +12,9 @@ import { fillLogin } from "./login.mjs";
 import { normalizeIp, parseAllow } from "./net.mjs";
 import { DEFAULT_DOWNLOADS, DEFAULT_PORT, DEFAULT_VAULT_DIR, VAULT_SOCKET } from "./paths.mjs";
 import { evalAllowed, loginUrlAllowed, navigationAllowed, normalizeSite } from "./policy.mjs";
-import { chooseBind, createPortal } from "./portal.mjs";
+import { chooseBinds, createPortal } from "./portal.mjs";
+import { handleProviderApi } from "./provider-api.mjs";
+import { providerSecrets } from "./providers.mjs";
 import { collectSecrets } from "./secrets.mjs";
 import { assertVaultDir, deleteEntry, getEntry, isMountPoint, loadStore, publicEntry, saveStore, upsertKey, upsertLogin } from "./store.mjs";
 
@@ -86,7 +88,7 @@ function main() {
 		vault: true,
 		profileDir: resolve(dir, "browser"),
 		downloadsDir: downloads,
-		secretValues: () => collectSecrets(data.entries),
+		secretValues: () => [...collectSecrets(data.entries), ...providerSecrets(data)],
 		allowNavigation: (url, info) => navigationAllowed(url, info),
 		assertEval(pageUrl, frameUrl) {
 			if (!evalAllowed(pageUrl, frameUrl, sites())) throw new Error("eval is refused on a site that has a saved login");
@@ -110,20 +112,20 @@ function main() {
 	});
 
 	let portalAddress = "";
-	let bind = "";
+	let binds = [];
 	try {
-		bind = chooseBind(process.env.NANO_VAULT_BIND, ipv4Addresses()) ?? "";
+		binds = chooseBinds(process.env.NANO_VAULT_BIND, ipv4Addresses());
 	} catch (error) {
 		console.error(`nano-vault: ${error.message}`);
-		bind = "";
+		binds = [];
 	}
 	const port = Number(process.env.NANO_VAULT_PORT || DEFAULT_PORT);
 	const portalOptions = {
-		bind,
 		port,
 		allow: parseAllow(process.env.NANO_VAULT_ALLOW),
 		ownAddresses,
 		insecureLocal,
+		providerCatalogs: new Map(),
 		hosts: (process.env.NANO_VAULT_HOSTS ?? "").split(",").map((item) => item.trim()).filter(Boolean),
 		read: () => data,
 		write,
@@ -132,18 +134,26 @@ function main() {
 		remove: (store, name) => deleteEntry(store, name),
 		log: (event) => console.error(`nano-vault: ${String(event).replace(/[\r\n]/g, " ")}`),
 	};
-	const host = createPortal(portalOptions);
-	if (!bind) {
-		console.error("nano-vault: no tailnet address found; portal not started. Set NANO_VAULT_BIND to one tailnet address.");
-	} else {
+	const portals = [];
+	if (!binds.length) {
+		console.error("nano-vault: no tailnet address found; portal not started. Set NANO_VAULT_BIND to an explicit address.");
+	}
+	for (const bind of binds) {
+		const host = createPortal({ ...portalOptions, bind });
+		portals.push(host);
 		host.listen(port, bind, () => {
-			portalAddress = `http://${bind}:${port}`;
-			console.error(`nano-vault: portal listening on ${portalAddress}`);
+			const address = `http://${bind}:${port}`;
+			if (!portalAddress || bind === binds[0]) portalAddress = address;
+			console.error(`nano-vault: portal listening on ${address}`);
 		});
 		host.on("error", (error) => console.error(`nano-vault: portal failed (${error.code ?? "error"})`));
 	}
 
 	const socket = http.createServer((req, res) => {
+		if (req.url?.startsWith("/providers/")) {
+			void handleProviderApi(req, res, { read: () => data, scrub });
+			return;
+		}
 		const chunks = [];
 		let size = 0;
 		req.on("data", (chunk) => {
@@ -194,7 +204,7 @@ function main() {
 	}
 
 	function scrub(text) {
-		return redact(text, collectSecrets(data.entries), { minLength: 6 });
+		return redact(text, [...collectSecrets(data.entries), ...providerSecrets(data)], { minLength: 6 });
 	}
 
 	async function vaultCommand(name, rest) {
@@ -231,7 +241,7 @@ function main() {
 	for (const signal of ["SIGTERM", "SIGINT"]) {
 		process.on(signal, () => {
 			socket.close();
-			host.close();
+			for (const portal of portals) portal.close();
 			process.exit(0);
 		});
 	}

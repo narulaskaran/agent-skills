@@ -23,6 +23,10 @@ export interface Config {
 	braveApiKey?: string;
 	/** Optional second model on an OpenAI-compatible endpoint the owner runs (llama.cpp, Ollama, ...). */
 	local?: LocalModel;
+	/** Optional owner-configured background model. */
+	background?: { provider: string; modelId: string };
+	/** Non-secret revision used to refresh an existing conversation model. */
+	providerRevision?: string;
 	/** Background tasks that may run at once; more wait in a queue. */
 	maxTasks: number;
 	/** A background task still running after this long is stopped and reported as failed. */
@@ -30,6 +34,8 @@ export interface Config {
 }
 
 export interface LocalModel {
+	/** Route this connection through the vault rather than direct HTTP. */
+	vault?: boolean;
 	modelId: string;
 	/** OpenAI-compatible base URL ending in /v1. */
 	baseUrl: string;

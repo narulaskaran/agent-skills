@@ -121,3 +121,9 @@ npm install --ignore-scripts
 npm run typecheck && npm test
 NANO_CHANNEL=stdin NANO_DATA_DIR=/tmp/nano-dev DEEPSEEK_API_KEY=... npm start   # type messages on stdin
 ```
+
+### Provider settings and speech
+
+With the `vault` pack enabled, its portal manages provider connections and per-job model choices: main conversation, background work, private/local work, transcription and speech generation. It supports OpenAI-compatible, Anthropic Messages and custom JSON API shapes, plus native Bark and Woof speech services. API keys remain in the vault; local private work cannot fall back to a hosted provider. See [vault](packs/vault/README.md).
+
+Enable the [speech pack](packs/speech/README.md) too for `nano-speech stt` and `nano-speech tts`, audio conversion and the corresponding skill. Provider settings persist in the vault volume and take effect on the next request.

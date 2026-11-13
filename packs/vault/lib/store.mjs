@@ -46,7 +46,7 @@ export function loadStore(dir) {
 export function saveStore(dir, data) {
 	const path = storePath(dir);
 	const tmp = `${path}.tmp-${process.pid}`;
-	const payload = JSON.stringify({ version: 1, entries: data.entries }, null, 2);
+	const payload = JSON.stringify({ ...data, version: 1, entries: data.entries }, null, 2);
 	const fd = openSync(tmp, "w", 0o600);
 	try {
 		writeSync(fd, payload);
@@ -138,7 +138,7 @@ export function upsertKey(data, input) {
 export function deleteEntry(data, name) {
 	const checked = checkName(name);
 	if (!data.entries.some((entry) => entry.name === checked)) throw new Error("no entry with that name");
-	return { version: 1, entries: data.entries.filter((entry) => entry.name !== checked) };
+	return { ...data, version: 1, entries: data.entries.filter((entry) => entry.name !== checked) };
 }
 
 export function getEntry(data, name) {
@@ -149,5 +149,5 @@ function replace(data, entry) {
 	const entries = data.entries.filter((item) => item.name !== entry.name);
 	entries.push(entry);
 	entries.sort((a, b) => a.name.localeCompare(b.name));
-	return { version: 1, entries };
+	return { ...data, version: 1, entries };
 }
