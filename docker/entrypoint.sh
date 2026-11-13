@@ -19,6 +19,21 @@ if [ "$(id -u)" = "0" ]; then
   elif [ ! -e "$kb" ]; then
     mkdir -p "$kb" && cp -r /app/templates/kb/. "$kb/" && chown -R "$uid:$gid" "$kb"
   fi
+  # Shipped packs may start a root helper before privileges drop. A pack under
+  # the data directory is writable by the agent, so a start-root.sh there is ignored.
+  IFS=',' read -ra pack_names <<< "${NANO_PACKS:-core}"
+  for pack_name in "${pack_names[@]}"; do
+    pack_name="${pack_name#"${pack_name%%[![:space:]]*}"}"
+    pack_name="${pack_name%"${pack_name##*[![:space:]]}"}"
+    case "$pack_name" in
+      ""|*[!A-Za-z0-9_-]*) echo "nano: ignoring invalid pack name" >&2; continue ;;
+    esac
+    hook="/app/packs/${pack_name}/start-root.sh"
+    if [ -x "$hook" ]; then
+      echo "nano: starting ${pack_name}"
+      "$hook"
+    fi
+  done
   export HOME="$data/home"
   groups="$gid${NANO_EXTRA_GROUPS:+,$NANO_EXTRA_GROUPS}"
   exec setpriv --reuid="$uid" --regid="$gid" --groups="$groups" "$@"
