@@ -42,3 +42,19 @@ test('missing and malformed Link expiry metadata fails before any form is filled
   assert.throws(() => cardFields(card), /missing or invalid expiry metadata/);
  }
 });
+
+import { numericFieldHolds } from '../lib/browser.mjs';
+
+test('a hosted field that masks the number but shows the last four counts as holding it', () => {
+ assert.equal(numericFieldHolds('•••• •••• •••• 0061', '4111111111110061').ok, true);
+ assert.equal(numericFieldHolds('•••', '123').ok, true);
+ assert.equal(numericFieldHolds('4111 1111 1111 0061', '4111111111110061').ok, true);
+ assert.equal(numericFieldHolds('09 / 29', '0929').ok, true);
+});
+
+test('a masked field of the wrong length or with other trailing digits is rejected, without echoing the value', () => {
+ assert.equal(numericFieldHolds('•••• •••• •••• 9999', '4111111111110061').ok, false);
+ assert.equal(numericFieldHolds('•••• 0061', '4111111111110061').ok, false);
+ assert.equal(numericFieldHolds('', '123').ok, false);
+ assert.ok(!numericFieldHolds('•••• •••• •••• 9999', '4111111111110061').shape.includes('9999'));
+});

@@ -30,11 +30,12 @@ test("the default view keeps errors and payment calls, and hides static noise", 
 		{ at, method: "POST", type: "xhr", status: 200, url: "site.example/api/pay/create", body: '{"code":1}' },
 		{ at, method: "POST", type: "fetch", status: 403, url: "site.example/api/other", body: '{"message":"blocked"}' },
 		{ at, method: "GET", type: "image", status: 200, url: "cdn.example/x.png" },
+		{ at, method: "POST", type: "xhr", status: 200, url: "www.paypal.com/xoplatform/logger/api/logger", body: "{}" },
 		{ at, kind: "console", level: "error", text: "Uncaught TypeError" },
 	];
 	const out = formatNetwork(entries);
 	assert.ok(out.includes("api/pay/create") && out.includes("403") && out.includes("console.error"));
-	assert.ok(!out.includes("api/profile") && !out.includes("x.png"));
+	assert.ok(!out.includes("api/profile") && !out.includes("x.png") && !out.includes("logger"));
 	assert.ok(formatNetwork(entries, { all: true }).includes("api/profile"));
 	assert.equal(formatNetwork(entries, { grep: "blocked" }).split("\n").length, 2);
 });

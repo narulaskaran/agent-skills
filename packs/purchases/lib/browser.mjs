@@ -138,11 +138,29 @@ export function cardFields(card) {
 }
 
 /** Confirm that a formatted payment input retained the secret, without returning it. */
+const MASK_CHARS = /[•*●·∗]/;
+
+/**
+ * Does a field's displayed value hold `digits`? Hosted card fields often mask what was typed
+ * (PayPal shows "•••• •••• •••• 0061"), so a masked value counts when it has the right length
+ * and its visible trailing digits match. Returns a description of the field's shape, never its text.
+ */
+export function numericFieldHolds(shown, digits) {
+	const text = String(shown ?? "");
+	const shownDigits = text.replace(/\D/g, "");
+	const compact = text.replace(/[\s/-]/g, "");
+	const masked = MASK_CHARS.test(text);
+	const shape = `field shows ${compact.length} of ${digits.length} characters, ${shownDigits.length} readable digits, ${masked ? "masked" : "not masked"}`;
+	if (shownDigits === digits) return { ok: true, shape };
+	if (masked && compact.length === digits.length && digits.endsWith(shownDigits)) return { ok: true, shape };
+	return { ok: false, shape };
+}
+
 export async function fillNumericPaymentField(field, value, slow = false) {
 	if (!/^[\d\s/]+$/.test(value)) throw new Error("invalid numeric payment field data");
 	const digits = value.replace(/\D/g, "");
 	if (!digits) throw new Error("missing numeric payment field data");
-	const retained = async () => (await field.inputValue()).replace(/\D/g, "") === digits;
+	const check = async () => numericFieldHolds(await field.inputValue(), digits);
 	if (slow) {
 		await field.click();
 		await field.fill("");
@@ -151,13 +169,14 @@ export async function fillNumericPaymentField(field, value, slow = false) {
 		await field.fill(value);
 	}
 	await field.press("Tab");
-	if (await retained()) return;
+	if ((await check()).ok) return;
 	// Hosted expiry masks may reject a pasted slash or insert their own separator.
 	await field.click();
 	await field.fill("");
 	await field.pressSequentially(digits, { delay: 60 });
 	await field.press("Tab");
-	if (!(await retained())) throw new Error("payment field did not retain the expected digits; stop before submitting payment");
+	const final = await check();
+	if (!final.ok) throw new Error(`payment field did not retain the expected digits (${final.shape}); stop before submitting payment`);
 }
 
 export function fillPlaceholders(text, fields) {
@@ -193,7 +212,10 @@ export function interactiveOnly(snapshot) {
 		.join("\n");
 }
 
-const PAYMENT_URL = /pay|order|checkout|charge|card|3ds|3d-secure|confirm|transaction|top_?up|recharge|purchase|billing|invoice|intent/i;
+const PAYMENT_URL = /pay|order|checkout|charge|card|3ds|3d-secure|confirm|transaction|top_?up|recharge|purchase|billing|invoice|intent|graphql/i;
+// Telemetry and fingerprinting calls are frequent, match the payment words by accident (a host named paypal), and say nothing useful.
+const NOISE_URL = /logger|beacon|analytics|telemetry|collect|metrics|\/r\/d\/b\/|stats|tracking|\/log(\/|\?|$)/i;
+const pathOf = (url) => String(url).slice(String(url).indexOf("/") + 1);
 const SECRET_KEY = /token|secret|pass|auth|session|jwt|cookie|credential|key|signature|nonce|csrf|otp/i;
 const OPAQUE = /[A-Za-z0-9._~+/=-]{32,}/g;
 
@@ -230,8 +252,7 @@ export function sanitizeBody(text, max = 500) {
 }
 
 export function formatNetwork(entries, { all = false, grep = "", last = 40 } = {}) {
-	const interesting = (e) =>
-		e.kind === "console" || e.failed || e.status >= 400 || PAYMENT_URL.test(e.url) || (all && ["document", "xhr", "fetch", "other"].includes(e.type));
+	const interesting = (e) => e.kind === "console" || e.failed || e.status >= 400 || (PAYMENT_URL.test(pathOf(e.url)) && !NOISE_URL.test(e.url));
 	let rows = entries.filter((e) => (all ? e.kind === "console" || ["document", "xhr", "fetch", "other"].includes(e.type) || e.failed : interesting(e)));
 	if (grep) rows = rows.filter((e) => `${e.url} ${e.body ?? ""} ${e.text ?? ""}`.toLowerCase().includes(String(grep).toLowerCase()));
 	rows = rows.slice(-Math.max(1, Number(last) || 40));
