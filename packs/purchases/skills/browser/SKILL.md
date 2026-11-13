@@ -5,7 +5,7 @@ description: Drive a real headless Chromium from the shell with the `browser` co
 
 # browser
 
-`browser` is on PATH. The first command starts Chromium in the background with a persistent profile (cookies and logins survive restarts); it shuts itself down after 15 idle minutes. Run `browser help` for every option.
+`browser` is on PATH. The first command starts Chromium in the background with a persistent profile (cookies and logins survive restarts); by default it shuts itself down after 15 idle minutes. The owner can set `NANO_BROWSER_IDLE_MINUTES=0` to keep it open until explicitly closed. Run `browser help` for every option.
 
 Prefer `web_fetch` or `curl` for plain reading and for sites with a JSON API. Use the browser when a page needs JavaScript, a login, or form input.
 

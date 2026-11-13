@@ -23,7 +23,9 @@ const STATE = resolve(process.env.NANO_BROWSER_DIR || join(DATA, "browser"));
 const PROFILE = join(STATE, "profile");
 const SHOTS = join(STATE, "screenshots");
 const SOCKET = join(tmpdir(), `nano-browser-${createHash("sha256").update(STATE).digest("hex").slice(0, 10)}.sock`);
-const IDLE_MS = Number(process.env.NANO_BROWSER_IDLE_MINUTES || 15) * 60_000;
+const idleMinutes = Number(process.env.NANO_BROWSER_IDLE_MINUTES?.trim() || 15);
+if (!Number.isFinite(idleMinutes) || idleMinutes < 0) throw new Error("NANO_BROWSER_IDLE_MINUTES must be zero or a positive number");
+const IDLE_MS = idleMinutes * 60_000; // Zero disables automatic closing; explicit close still works.
 const MAX_OUTPUT = 15_000;
 
 const HELP = `browser: headless Chromium with a persistent profile (${PROFILE})
@@ -400,7 +402,7 @@ export function createBrowserHost(options = {}) {
 			headless: true,
 			// --site-per-process: the headless shell otherwise keeps cross-origin iframes in-process,
 			// and WebMCP then does not report tools registered inside them (Stripe's frames).
-			args: ["--enable-features=WebMCP", "--site-per-process", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+			args: ["--enable-features=WebMCP,WebMCPTesting,DevToolsWebMCPSupport", "--site-per-process", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
 			viewport: { width: 1280, height: 900 },
 			userAgent: userAgent(),
 			locale: "en-US",
@@ -932,7 +934,7 @@ export function createBrowserHost(options = {}) {
 			if (result && typeof result === "object" && result.png) return { text: out(result.text ?? ""), png: result.png };
 			return { text: out(String(result ?? "")) };
 		} finally {
-			if (vault) idle = setTimeout(() => void context?.close().catch(() => {}), IDLE_MS);
+			if (vault && IDLE_MS > 0) idle = setTimeout(() => void context?.close().catch(() => {}), IDLE_MS);
 		}
 	}
 
@@ -958,7 +960,7 @@ export function createBrowserHost(options = {}) {
 					const message = String(error?.message ?? error).split("\n").slice(0, 6).join("\n");
 					reply = { ok: false, text: out(`error: ${message}`) };
 				}
-				idle = setTimeout(() => void commands.close(), IDLE_MS);
+				if (IDLE_MS > 0) idle = setTimeout(() => void commands.close(), IDLE_MS);
 				if (!res.writableEnded) {
 					res.writeHead(200, { "content-type": "application/json" });
 					res.end(JSON.stringify(reply));
@@ -973,7 +975,7 @@ export function createBrowserHost(options = {}) {
 			rmSync(SOCKET, { force: true });
 		}
 		server.listen(SOCKET, () => console.error(`browser daemon listening on ${SOCKET}`));
-		idle = setTimeout(() => void commands.close(), IDLE_MS);
+		if (IDLE_MS > 0) idle = setTimeout(() => void commands.close(), IDLE_MS);
 	})();
 	for (const signal of ["SIGTERM", "SIGINT"]) {
 		process.on(signal, async () => {

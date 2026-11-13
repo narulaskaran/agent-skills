@@ -7,7 +7,7 @@
 - **Dialogs** (`alert`, `confirm`) are accepted automatically and reported in the command output.
 - **Downloads** are saved under the browser directory; the command output gives the path.
 - **Bot checks** (Cloudflare, hCaptcha, "verify you are human", login walls from Amazon and similar): do not try to defeat them. Look for an API, a different store, or a guest checkout. If nothing works, tell the owner plainly and send a screenshot. For Link purchases, record it with `link-cli report --outcome blocked --tag captcha …`.
-- **Logged-in sites**: the profile keeps cookies. If a site needs the owner's login, ask whether they want you to sign in; never guess passwords. One-time codes come from the owner.
+- **Logged-in sites**: the profile keeps cookies. For an owner-authorized login, use `browser login` with a saved vault entry; never guess passwords. Email verification codes can be retrieved from the configured inbox using its skill. Keep codes out of chat and notes, and use only fresh messages matching the current login. Link-app spend approval and any bank verification still require the owner's participation.
 - **Stuck browser**: `browser close`, then start again. The profile is kept.
 - **Location**: the browser runs where the container runs, so stores may guess the wrong country or currency. Check the currency and ship-to country before paying.
 

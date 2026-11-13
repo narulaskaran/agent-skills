@@ -37,7 +37,7 @@ export async function fillLogin({ page, entry, hints = {}, allow, mark, settle, 
 		if (otp) {
 			otpRequested = true;
 			if (!entry.totp) {
-				return await report(page, { submitted, passwordLeft: await passwordVisible(page), otpRequested, otpFilled, note: "one-time code requested and none is saved" });
+				return await report(page, { submitted, passwordLeft: await passwordVisible(page), otpRequested, otpFilled, note: "verification code required; no authenticator seed saved. For email verification, use the configured inbox to retrieve a fresh code" });
 			}
 			const code = totpCode(entry.totp);
 			stillOnSite(page, otp.frame, entry.site, allow);
@@ -67,7 +67,7 @@ async function report(page, { submitted, passwordLeft, otpRequested, otpFilled, 
 		`title: ${title}`,
 		passwordLeft ? "password field still present (login may have failed)" : "no password field",
 	];
-	if (otpRequested && !otpFilled) lines.push("one-time code requested and none is saved");
+	if (otpRequested && !otpFilled) lines.push("verification code required; no authenticator seed saved. For email verification, use the configured inbox to retrieve a fresh code");
 	if (otpFilled) lines.push("one-time code submitted");
 	return lines.filter(Boolean).join("\n");
 }
