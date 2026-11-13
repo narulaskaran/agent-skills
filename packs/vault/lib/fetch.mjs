@@ -33,7 +33,7 @@ export function parseFetchArgs(argv) {
 	return { name: positional[0], url: positional[1], method: (method ?? (data !== undefined ? "POST" : "GET")).toUpperCase(), headers, body: data };
 }
 
-export async function authorizedFetch({ entry, url, method, headers, body, resolve = resolveHost, transport, maxBytes = MAX_BODY }) {
+export async function authorizedFetch({ entry, url, method, headers, body, resolve = resolveHost, transport, maxBytes = MAX_BODY, anyPort = false }) {
 	let current;
 	try {
 		current = new URL(url);
@@ -53,6 +53,8 @@ export async function authorizedFetch({ entry, url, method, headers, body, resol
 	for (let hop = 0; hop <= 5; hop++) {
 		if (current.protocol !== "https:") throw new Error("refusing a non-https URL");
 		if (current.username || current.password) throw new Error("refusing a URL that contains credentials");
+		// A key is saved for a host, and another port on that host can be another party's server.
+		if (current.port && !anyPort) throw new Error("refusing a URL with a port; keys are sent to port 443 only");
 		const addresses = (await resolve(current.hostname)).map(normalizeIp);
 		if (addresses.length === 0) throw new Error("that host did not resolve");
 		const gate = destinationAllowed(current.hostname, addresses, entry.hosts);
@@ -102,7 +104,9 @@ export function httpsTransport({ rejectUnauthorized = true } = {}) {
 					rejectUnauthorized,
 					lookup: (_hostname, opts, callback) => {
 						const done = typeof opts === "function" ? opts : callback;
-						done(null, address, isIP(address));
+						const family = isIP(address);
+						if (typeof opts === "object" && opts?.all) done(null, [{ address, family }]);
+						else done(null, address, family);
 					},
 				},
 				(res) => {

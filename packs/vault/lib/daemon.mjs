@@ -219,6 +219,7 @@ function main() {
 			headers: args.headers,
 			body: args.body,
 			transport: httpsTransport({ rejectUnauthorized: !insecureTls }),
+			anyPort: insecureTls,
 		});
 	}
 

@@ -37,7 +37,8 @@ export function loginUrlAllowed(raw, site, { allowHttpLoopback = false } = {}) {
 	}
 	if (url.username || url.password) return false;
 	if (!hostMatchesSite(url.hostname, site)) return false;
-	if (url.protocol === "https:") return true;
+	// Another port on the saved host can be another party's server.
+	if (url.protocol === "https:") return url.port === "";
 	return Boolean(allowHttpLoopback && url.protocol === "http:" && url.hostname === "127.0.0.1");
 }
 

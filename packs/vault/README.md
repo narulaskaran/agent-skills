@@ -20,7 +20,8 @@ Honest leftovers:
 
 - The store is not encrypted. A key kept beside the file would not add a boundary. The directory mode and the user id are the boundary. Anyone who can read the filesystem as root, or as `nano-vault`, can read the file.
 - The portal trusts every tailnet device that is not this machine. There is no passphrase. A hostile device on the tailnet can add, replace, or delete entries. It still cannot read a stored password or seed back.
-- A page can copy a filled secret into some other element after the command returns. Text the daemon returns is redacted; a later screenshot can still show pixels. Password fields and fields the vault filled are masked, and a failed login clears leftover password fields before the command returns.
+- The saved site itself is trusted with the password. Its own script sees what is typed, as it does when you log in by hand. If that site is compromised, or serves a page written by someone else on the same host, the script can re-encode the password (base64, a canvas, a download) and no redaction will catch that. Redaction and the screenshot refusal catch a page that prints the secret as it is, such as a failed login that echoes it. Save the most specific host you can (`platform.example.com`, not `example.com`).
+- Logins are typed only on the saved host over https on the default port. API keys are sent only to the saved hosts on port 443.
 - v1's default portal is IPv4. An IPv6 tailnet address needs `NANO_VAULT_BIND` and `NANO_VAULT_ALLOW`.
 
 ## Layout

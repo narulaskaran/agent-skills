@@ -57,3 +57,8 @@ test("a name that resolves to a restricted address is refused unless the pin is 
 	assert.equal(destinationAllowed(loop, [loop], [loop]).ok, true);
 	assert.equal(destinationAllowed("localhost", [loop], [loop]).ok, false);
 });
+
+test("a login page on another port of the saved site is refused", () => {
+	assert.equal(loginUrlAllowed("https://example.com/login", "example.com"), true);
+	assert.equal(loginUrlAllowed("https://example.com:8443/login", "example.com"), false);
+});

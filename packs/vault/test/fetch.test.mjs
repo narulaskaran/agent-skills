@@ -93,3 +93,12 @@ test("a supplied Host header is refused, so the key cannot be fronted to another
 	);
 	assert.equal(seen.length, 0);
 });
+
+test("a URL with a port is refused unless the test flag allows it", async () => {
+	const pub = ip4(93, 184, 216, 34);
+	const { seen, transport } = scripted([{ status: 200, headers: {}, body: "ok" }]);
+	await assert.rejects(authorizedFetch({ entry, url: "https://api.example:8443/", method: "GET", headers: [], resolve: async () => [pub], transport }), /port/);
+	assert.equal(seen.length, 0);
+	await authorizedFetch({ entry, url: "https://api.example:8443/", method: "GET", headers: [], resolve: async () => [pub], transport, anyPort: true });
+	assert.equal(seen.length, 1);
+});
