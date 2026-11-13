@@ -27,6 +27,7 @@ export async function fillLogin({ page, entry, hints = {}, allow, mark, settle, 
 		}
 		const user = hints.user ? await hinted(page, locate(hints.user), "user", entry.site, allow) : await findUsername(page, entry.site, allow, password);
 		if (user) await user.locator.fill(entry.username).catch(() => {});
+		stillOnSite(page, password.frame, entry.site, allow);
 		await password.locator.fill(entry.password);
 		await mark(password.locator);
 		await submit(password.frame);
@@ -39,6 +40,7 @@ export async function fillLogin({ page, entry, hints = {}, allow, mark, settle, 
 				return await report(page, { submitted, passwordLeft: await passwordVisible(page), otpRequested, otpFilled, note: "one-time code requested and none is saved" });
 			}
 			const code = totpCode(entry.totp);
+			stillOnSite(page, otp.frame, entry.site, allow);
 			await otp.locator.fill(code);
 			await mark(otp.locator);
 			await submit(otp.frame);
@@ -49,6 +51,11 @@ export async function fillLogin({ page, entry, hints = {}, allow, mark, settle, 
 	} finally {
 		await clearSecrets(page);
 	}
+}
+
+/** The page may have navigated since the fields were found. Check again right before typing a secret. */
+function stillOnSite(page, frame, site, allow) {
+	if (!allow(page.url(), site) || !allow(frame.url(), site)) throw new Error("refusing to log in: the page left the saved site");
 }
 
 async function report(page, { submitted, passwordLeft, otpRequested, otpFilled, note }) {

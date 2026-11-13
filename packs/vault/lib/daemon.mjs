@@ -164,6 +164,15 @@ function main() {
 		});
 	});
 
+	// One browser command at a time. Without this a second command could move the
+	// tab to another site between the login check and the password being typed.
+	let queue = Promise.resolve();
+	function inTurn(job) {
+		const run = queue.then(job);
+		queue = run.catch(() => {});
+		return run;
+	}
+
 	async function answer(raw) {
 		let parsed;
 		try {
@@ -175,7 +184,7 @@ function main() {
 		const name = argv[0] ?? "";
 		try {
 			if (name === "list" || name === "url" || name === "fetch") return { ok: true, text: scrub(await vaultCommand(name, argv.slice(1))) };
-			const result = await browser.handle({ argv, cwd: parsed.cwd, card: parsed.card });
+			const result = await inTurn(() => browser.handle({ argv, cwd: parsed.cwd, card: parsed.card }));
 			return { ok: true, text: scrub(result.text ?? ""), ...(result.png ? { png: result.png } : {}) };
 		} catch (error) {
 			const message = String(error?.message ?? "failed").split("\n").slice(0, 6).join("\n");

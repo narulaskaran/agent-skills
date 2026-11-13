@@ -83,3 +83,13 @@ test("a public name that resolves to a private address is refused", async () => 
 	assert.match(text, /HTTP 200/);
 	assert.equal(seen[0].authorization.endsWith(key), true);
 });
+
+test("a supplied Host header is refused, so the key cannot be fronted to another site", async () => {
+	const pub = ip4(93, 184, 216, 34);
+	const { seen, transport } = scripted([]);
+	await assert.rejects(
+		authorizedFetch({ entry, url: "https://api.example/", method: "GET", headers: [{ name: "host", value: "other.example" }], resolve: async () => [pub], transport }),
+		/refusing a supplied host header/,
+	);
+	assert.equal(seen.length, 0);
+});

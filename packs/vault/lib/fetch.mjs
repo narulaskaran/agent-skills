@@ -12,6 +12,9 @@ import { destinationAllowed, normalizeIp } from "./net.mjs";
 
 const MAX_BODY = 200_000;
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+// A supplied Host would send the key to another site behind the same CDN address.
+// The rest change how the request is framed or routed.
+const FORBIDDEN_HEADERS = new Set(["host", "connection", "content-length", "transfer-encoding", "upgrade", "proxy-authorization", "te", "trailer", "keep-alive"]);
 
 export function parseFetchArgs(argv) {
 	let method;
@@ -40,6 +43,9 @@ export async function authorizedFetch({ entry, url, method, headers, body, resol
 	const reserved = entry.header.toLowerCase();
 	if (headers.some((header) => header.name.toLowerCase() === reserved)) {
 		throw new Error(`refusing a supplied ${entry.header} header; the saved key uses it`);
+	}
+	for (const header of headers) {
+		if (FORBIDDEN_HEADERS.has(header.name.toLowerCase())) throw new Error(`refusing a supplied ${header.name} header`);
 	}
 	let sendKey = true;
 	let verb = method;

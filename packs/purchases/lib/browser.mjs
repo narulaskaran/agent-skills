@@ -508,6 +508,33 @@ export function createBrowserHost(options = {}) {
 		return mask;
 	}
 
+	/**
+	 * Text redaction cannot reach pixels. If a page prints a saved secret (a failed
+	 * login that echoes the password, say), a screenshot would show it, so refuse.
+	 * Masked fields (password inputs, fields the vault filled) are not counted.
+	 */
+	async function showsSecret(p) {
+		const list = [...new Set(options.secretValues?.() ?? [])].filter((secret) => secret && secret.length >= 6);
+		if (list.length === 0) return false;
+		const texts = [await p.ariaSnapshot({ mode: "ai" }).catch(() => "")];
+		for (const frame of p.frames()) {
+			texts.push(
+				await frame
+					.evaluate(() => {
+						const parts = [document.documentElement?.innerText ?? ""];
+						for (const el of document.querySelectorAll("input, textarea")) {
+							if (el.type === "password" || el.hasAttribute("data-vault-secret")) continue;
+							parts.push(el.value ?? "");
+						}
+						return parts.join("\n");
+					})
+					.catch(() => ""),
+			);
+		}
+		const all = texts.join("\n");
+		return list.some((secret) => all.includes(secret));
+	}
+
 	function guardOpen(url) {
 		if (!options.allowNavigation) return;
 		if (!options.allowNavigation(url, { top: true })) {
@@ -609,6 +636,7 @@ export function createBrowserHost(options = {}) {
 			const p = await current();
 			const mask = masksFor(p);
 			if (vault) {
+				if (await showsSecret(p)) throw new Error("refusing a screenshot: this page is showing a saved secret as text. Use snapshot or text, which redact it.");
 				const buffer = flags.ref ? await target(p, flags.ref).screenshot({ mask }) : await p.screenshot({ fullPage: Boolean(flags.full), mask });
 				return { text: "", png: buffer.toString("base64") };
 			}
