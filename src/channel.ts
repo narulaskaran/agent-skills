@@ -71,7 +71,7 @@ type SpectrumCore = Pick<typeof import("@spectrum-ts/core"), "attachment" | "voi
  * Sends a file as a native iMessage voice memo (waveform bubble, plays inline) or as a plain attachment.
  *
  * The Photon adapter only needs m4a/aac for a voice memo; anything else is transcoded with ffmpeg at send time,
- * and the Nano image has none. So when the choice was automatic (`asVoice` unset) and the voice send fails, the
+ * which is installed by the speech pack. When the choice was automatic (`asVoice` unset) and the voice send fails, the
  * file still goes out as an attachment, as before. An explicit `asVoice: true` reports the failure instead.
  */
 export async function sendFileContent(
