@@ -8,12 +8,13 @@
 
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { VAULT_RUN_DIR, VAULT_SOCKET } from "../../vault/lib/paths.mjs";
 
 const SELF = fileURLToPath(import.meta.url);
 const INSTALL = process.env.NANO_BROWSER_HOME || "/opt/nano-browser";
@@ -83,11 +84,12 @@ const CARD_INPUTS =
 	'input[autocomplete^="cc-"], input[name*="card" i], input[name*="cvc" i], input[name*="cvv" i], input[name*="exp" i]';
 
 /** Hide card numbers (Luhn-valid 13-19 digits), security codes and known secrets. */
-export function redact(text, secrets = []) {
+export function redact(text, secrets = [], options = {}) {
+	const minLength = options.minLength ?? 8;
 	let out = String(text);
-	for (const secret of secrets) {
-		if (secret && secret.length >= 8) out = out.split(secret).join("[redacted]");
-	}
+	const list = [...new Set([...secrets].map((secret) => String(secret ?? "")).filter((secret) => secret.length >= minLength))];
+	list.sort((a, b) => b.length - a.length);
+	for (const secret of list) out = out.split(secret).join("[redacted]");
 	out = out.replace(/\b\d(?:[ -]?\d){12,18}\b/g, (match) => {
 		const digits = match.replace(/\D/g, "");
 		return luhn(digits) ? `[card •••• ${digits.slice(-4)}]` : match;
@@ -161,12 +163,95 @@ function cap(text, max = MAX_OUTPUT) {
 	return text.length > max ? `${text.slice(0, max)}\n[cut at ${max} of ${text.length} chars; use --max, a ref, or -i]` : text;
 }
 
+// The vault directory is created by root and owned by the vault user. A directory
+// the agent made for itself does not count: that would let it impersonate the vault.
+function vaultControlled() {
+	try {
+		const st = statSync(VAULT_RUN_DIR);
+		return st.isDirectory() && st.uid !== process.getuid();
+	} catch {
+		return false;
+	}
+}
+
+function activeSocket() {
+	return vaultControlled() ? VAULT_SOCKET : SOCKET;
+}
+
+function linkCli(args) {
+	return new Promise((resolvePromise, reject) => {
+		execFile("link-cli", [...args, "--format", "json"], { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: process.env }, (error, stdout, stderr) => {
+			if (error) {
+				// stdout may hold credentials; report only the CLI's error code and message.
+				let reason = "link-cli failed";
+				for (const text of [stderr, stdout]) {
+					try {
+						const parsed = JSON.parse(text);
+						const item = Array.isArray(parsed) ? parsed[0] : parsed;
+						if (item?.code || item?.message) reason = `${item.code ?? "error"}: ${item.message ?? ""}`;
+					} catch {
+						// not JSON
+					}
+				}
+				reject(new Error(reason));
+				return;
+			}
+			try {
+				const parsed = JSON.parse(stdout);
+				resolvePromise(Array.isArray(parsed) ? parsed[parsed.length - 1] : parsed);
+			} catch {
+				reject(new Error("link-cli returned output that is not JSON"));
+			}
+		});
+	});
+}
+
+async function spendRequest(id, include) {
+	if (!/^lsrq_[A-Za-z0-9_]+$/.test(String(id))) throw new Error("--spend-request needs an id like lsrq_...");
+	const request = await linkCli(["spend-request", "retrieve", id, "--include", include]);
+	if (request?.status !== "approved") throw new Error(`spend request ${id} is ${request?.status ?? "unknown"}, not approved`);
+	return request;
+}
+
+/** Resolve Link card data in this process. The returned object is never printed. */
+async function cardSideChannel(argv) {
+	const [command, ...rest] = argv;
+	const { positional, flags } = parseArgs(rest, ["full", "force", "slow", "submit"]);
+	if (command === "lpt" && positional[0] === "fill") {
+		const request = await spendRequest(positional[1], "link_pay_token");
+		const token = typeof request.link_pay_token === "string" ? request.link_pay_token : request.link_pay_token?.token;
+		if (!token) throw new Error("that spend request returned no Link Pay Token");
+		return { token };
+	}
+	if (!hasPlaceholders(positional.join(" "))) return undefined;
+	if (!flags["spend-request"]) throw new Error("{{card.*}} placeholders need --spend-request <lsrq_...>");
+	const request = await spendRequest(flags["spend-request"], "card");
+	if (!request.card?.number) throw new Error("that spend request has no card credential (is it a card request?)");
+	return { fields: cardFields(request.card) };
+}
+
+function clientShotPath(argv) {
+	const { positional } = parseArgs(argv.slice(1), ["full"]);
+	const arg = positional[0];
+	if (!arg) {
+		const dir = join(DATA, "browser", "screenshots");
+		mkdirSync(dir, { recursive: true });
+		return join(dir, `shot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
+	}
+	return isAbsolute(arg) ? arg : resolve(process.cwd(), arg);
+}
+
+function safeDownloadName(name) {
+	const cleaned = basename(String(name || "download")).replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "").slice(0, 80);
+	return cleaned || "download";
+}
+
 // ---------------------------------------------------------------------------------------
 // Client
 
 function call(body, timeoutMs = 300_000) {
 	return new Promise((resolvePromise, reject) => {
-		const req = http.request({ socketPath: SOCKET, path: "/", method: "POST", timeout: timeoutMs }, (res) => {
+		const req = http.request({ socketPath: activeSocket(), path: "/", method: "POST", timeout: timeoutMs }, (res) => {
 			let data = "";
 			res.setEncoding("utf8");
 			res.on("data", (chunk) => (data += chunk));
@@ -205,8 +290,9 @@ async function startDaemon() {
 
 async function client(argv) {
 	const command = argv[0];
+	const vault = vaultControlled();
 	if (!command || command === "help" || command === "--help" || command === "-h") {
-		console.log(HELP);
+		console.log(vault ? `${HELP}\n  login <name> [--user ref] [--password ref] [--otp ref]\n                                 fill the saved vault login for this site` : HELP);
 		return 0;
 	}
 	if (!(await alive())) {
@@ -215,12 +301,25 @@ async function client(argv) {
 			return 0;
 		}
 		if (command === "status") {
-			console.log(`browser is not running (profile ${PROFILE})`);
+			console.log(vault ? "browser is not running (held by the vault)" : `browser is not running (profile ${PROFILE})`);
 			return 0;
 		}
-		await startDaemon();
+		if (vault) {
+			for (let i = 0; i < 50 && !(await alive()); i++) await new Promise((r) => setTimeout(r, 200));
+			if (!(await alive())) throw new Error("the vault browser is not running");
+		} else {
+			await startDaemon();
+		}
 	}
-	const result = await call({ argv, cwd: process.cwd() });
+	const card = vault ? await cardSideChannel(argv) : undefined;
+	const result = await call({ argv, cwd: process.cwd(), ...(card ? { card } : {}) });
+	if (result.png) {
+		const path = clientShotPath(argv);
+		mkdirSync(dirname(path), { recursive: true });
+		writeFileSync(path, Buffer.from(result.png, "base64"));
+		console.log(path);
+		return result.ok ? 0 : 1;
+	}
 	if (result.text) (result.ok ? process.stdout : process.stderr).write(`${result.text}\n`);
 	return result.ok ? 0 : 1;
 }
@@ -229,6 +328,14 @@ async function client(argv) {
 // Daemon
 
 async function daemon() {
+	createBrowserHost();
+}
+
+/** @param {object} [options] */
+export function createBrowserHost(options = {}) {
+	const vault = options.vault === true;
+	const profileDir = options.profileDir || PROFILE;
+	const downloadsDir = options.downloadsDir || join(STATE, "downloads");
 	const require = createRequire(join(INSTALL, "node_modules", "noop.js"));
 	process.env.PLAYWRIGHT_BROWSERS_PATH ||= join(INSTALL, "browsers");
 	const { chromium } = require("playwright-core");
@@ -240,6 +347,7 @@ async function daemon() {
 	const secretFields = new WeakMap(); // page -> locators that received card data (masked in screenshots)
 	const mcp = new WeakMap(); // page -> { session, tools: Map<key, tool> }
 	let idle;
+	let requestCard = null;
 
 	function userAgent() {
 		try {
@@ -259,18 +367,36 @@ async function daemon() {
 			void dialog.accept().catch(() => {});
 		});
 		p.on("download", async (download) => {
-			const path = join(STATE, "downloads", download.suggestedFilename());
+			mkdirSync(downloadsDir, { recursive: true });
+			let name = safeDownloadName(download.suggestedFilename());
+			if ([...secrets].some((secret) => secret && name.includes(secret))) name = "download";
+			let path = join(downloadsDir, name);
+			if (existsSync(path)) path = join(downloadsDir, `${Date.now()}-${name}`);
 			await download.saveAs(path).catch(() => {});
+			if (vault) {
+				try {
+					chmodSync(path, 0o644);
+				} catch {
+					// the download was not written
+				}
+			}
 			notes.push(`[download saved: ${path}]`);
+		});
+		if (!options.allowNavigation) return;
+		p.on("framenavigated", (frame) => {
+			const url = frame.url();
+			if (options.allowNavigation(url, { top: frame === p.mainFrame() })) return;
+			notes.push("[blocked a navigation to a forbidden URL scheme]");
+			void frame.goto("about:blank").catch(() => {});
 		});
 	}
 
 	async function ensureBrowser() {
 		if (context) return;
-		mkdirSync(PROFILE, { recursive: true });
+		mkdirSync(profileDir, { recursive: true });
 		// A crash or a different container hostname leaves a lock behind that blocks launch.
-		for (const lock of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) rmSync(join(PROFILE, lock), { force: true });
-		context = await chromium.launchPersistentContext(PROFILE, {
+		for (const lock of ["SingletonLock", "SingletonSocket", "SingletonCookie"]) rmSync(join(profileDir, lock), { force: true });
+		context = await chromium.launchPersistentContext(profileDir, {
 			headless: true,
 			// --site-per-process: the headless shell otherwise keeps cross-origin iframes in-process,
 			// and WebMCP then does not report tools registered inside them (Stripe's frames).
@@ -293,6 +419,16 @@ async function daemon() {
 		});
 		for (const p of context.pages()) watch(p);
 		page = context.pages()[0] ?? (await context.newPage());
+		if (options.allowNavigation) {
+			await context.route("**/*", async (route) => {
+				const request = route.request();
+				if (request.isNavigationRequest() && !options.allowNavigation(request.url(), { top: false })) {
+					await route.abort("blockedbyclient").catch(() => {});
+					return;
+				}
+				await route.continue().catch(() => {});
+			});
+		}
 	}
 
 	async function current() {
@@ -327,49 +463,20 @@ async function daemon() {
 		return frame;
 	}
 
-	function linkCli(args) {
-		return new Promise((resolvePromise, reject) => {
-			execFile("link-cli", [...args, "--format", "json"], { timeout: 60_000, maxBuffer: 10 * 1024 * 1024, env: process.env }, (error, stdout, stderr) => {
-				if (error) {
-					// stdout may hold credentials; report only the CLI's error code and message.
-					let reason = "link-cli failed";
-					for (const text of [stderr, stdout]) {
-						try {
-							const parsed = JSON.parse(text);
-							const item = Array.isArray(parsed) ? parsed[0] : parsed;
-							if (item?.code || item?.message) reason = `${item.code ?? "error"}: ${item.message ?? ""}`;
-						} catch {
-							// not JSON
-						}
-					}
-					reject(new Error(reason));
-					return;
-				}
-				try {
-					const parsed = JSON.parse(stdout);
-					resolvePromise(Array.isArray(parsed) ? parsed[parsed.length - 1] : parsed);
-				} catch {
-					reject(new Error("link-cli returned output that is not JSON"));
-				}
-			});
-		});
-	}
-
-	async function spendRequest(id, include) {
-		if (!/^lsrq_[A-Za-z0-9_]+$/.test(String(id))) throw new Error("--spend-request needs an id like lsrq_...");
-		const request = await linkCli(["spend-request", "retrieve", id, "--include", include]);
-		if (request?.status !== "approved") throw new Error(`spend request ${id} is ${request?.status ?? "unknown"}, not approved`);
-		return request;
-	}
-
 	async function resolveSecrets(text, flags) {
 		if (!hasPlaceholders(text)) return { value: text, secret: false };
-		if (!flags["spend-request"]) throw new Error("{{card.*}} placeholders need --spend-request <lsrq_...>");
-		const request = await spendRequest(flags["spend-request"], "card");
-		if (!request.card?.number) throw new Error("that spend request has no card credential (is it a card request?)");
-		const fields = cardFields(request.card);
+		let fields;
+		if (vault) {
+			fields = requestCard?.fields;
+			if (!fields) throw new Error("{{card.*}} placeholders need --spend-request <lsrq_...>");
+		} else {
+			if (!flags["spend-request"]) throw new Error("{{card.*}} placeholders need --spend-request <lsrq_...>");
+			const request = await spendRequest(flags["spend-request"], "card");
+			if (!request.card?.number) throw new Error("that spend request has no card credential (is it a card request?)");
+			fields = cardFields(request.card);
+		}
 		secrets.add(fields.number);
-		secrets.add(fields.number.replace(/(\d{4})(?=\d)/g, "$1 "));
+		secrets.add(String(fields.number).replace(/(\d{4})(?=\d)/g, "$1 "));
 		return { value: fillPlaceholders(text, fields), secret: true, cvc: fields.cvc };
 	}
 
@@ -379,9 +486,34 @@ async function daemon() {
 		secretFields.set(p, list);
 	}
 
+	function scrub(text) {
+		for (const secret of options.secretValues?.() ?? []) secrets.add(secret);
+		return redact(text, secrets, { minLength: vault ? 6 : 8 });
+	}
+
 	function out(text) {
 		const extra = notes.splice(0);
-		return redact([text, ...extra].filter(Boolean).join("\n"), secrets);
+		return scrub([text, ...extra].filter(Boolean).join("\n"));
+	}
+
+	function masksFor(p) {
+		const mask = [...(secretFields.get(p) ?? [])];
+		for (const frame of p.frames()) {
+			mask.push(frame.locator(CARD_INPUTS));
+			if (vault) {
+				mask.push(frame.locator("input[type=password]"));
+				mask.push(frame.locator("[data-vault-secret]"));
+			}
+		}
+		return mask;
+	}
+
+	function guardOpen(url) {
+		if (!options.allowNavigation) return;
+		if (!options.allowNavigation(url, { top: true })) {
+			const scheme = url.includes(":") ? url.slice(0, url.indexOf(":") + 1) : "that";
+			throw new Error(`refusing to open ${scheme} URLs`);
+		}
 	}
 
 	/**
@@ -438,14 +570,14 @@ async function daemon() {
 		},
 
 		async status() {
-			if (!context) return `daemon running, browser not started (profile ${PROFILE})`;
+			if (!context) return `daemon running, browser not started (profile ${profileDir})`;
 			const p = await current();
-			return `running, ${context.pages().length} tab(s), active: ${await p.title().catch(() => "")} ${p.url()}\nprofile ${PROFILE}`;
+			return `running, ${context.pages().length} tab(s), active: ${await p.title().catch(() => "")} ${p.url()}\nprofile ${profileDir}`;
 		},
 
 		async close() {
 			await context?.close().catch(() => {});
-			setTimeout(() => process.exit(0), 50);
+			if (!vault) setTimeout(() => process.exit(0), 50);
 			return "browser closed";
 		},
 
@@ -453,6 +585,7 @@ async function daemon() {
 			let url = positional[0];
 			if (!url) throw new Error("usage: browser open <url>");
 			if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+			guardOpen(url);
 			const p = await current();
 			const response = await p.goto(url, { waitUntil: "domcontentloaded" });
 			await settle(p);
@@ -463,24 +596,28 @@ async function daemon() {
 			const p = await current();
 			const raw = positional[0] ? await target(p, positional[0]).ariaSnapshot({ mode: "ai" }) : await p.ariaSnapshot({ mode: "ai" });
 			const body = flags.interactive ? interactiveOnly(raw) : raw;
-			return `${await p.title().catch(() => "")} | ${p.url()}\n${cap(redact(body, secrets), Number(flags.max) || MAX_OUTPUT)}`;
+			return `${await p.title().catch(() => "")} | ${p.url()}\n${cap(scrub(body), Number(flags.max) || MAX_OUTPUT)}`;
 		},
 
 		async text({ positional, flags }) {
 			const p = await current();
 			const value = positional[0] ? await target(p, positional[0]).innerText() : await p.locator("body").innerText();
-			return cap(redact(value.replace(/\n{3,}/g, "\n\n").trim(), secrets), Number(flags.max) || MAX_OUTPUT);
+			return cap(scrub(value.replace(/\n{3,}/g, "\n\n").trim()), Number(flags.max) || MAX_OUTPUT);
 		},
 
 		async screenshot({ positional, flags }, cwd) {
 			const p = await current();
+			const mask = masksFor(p);
+			if (vault) {
+				const buffer = flags.ref ? await target(p, flags.ref).screenshot({ mask }) : await p.screenshot({ fullPage: Boolean(flags.full), mask });
+				return { text: "", png: buffer.toString("base64") };
+			}
 			mkdirSync(SHOTS, { recursive: true });
 			const path = positional[0]
 				? isAbsolute(positional[0])
 					? positional[0]
 					: resolve(cwd, positional[0])
 				: join(SHOTS, `shot-${new Date().toISOString().replace(/[:.]/g, "-")}.png`);
-			const mask = [...(secretFields.get(p) ?? []), ...p.frames().map((frame) => frame.locator(CARD_INPUTS))];
 			if (flags.ref) await target(p, flags.ref).screenshot({ path, mask });
 			else await p.screenshot({ path, fullPage: Boolean(flags.full), mask });
 			return path;
@@ -644,8 +781,24 @@ async function daemon() {
 		async eval({ positional, flags }) {
 			const p = await current();
 			const frame = await frameFor(p, flags.frame);
+			options.assertEval?.(p.url(), frame.url());
 			const result = await frame.evaluate(positional.join(" "));
-			return cap(redact(typeof result === "string" ? result : JSON.stringify(result, null, 1) ?? "undefined", secrets));
+			return cap(scrub(typeof result === "string" ? result : JSON.stringify(result, null, 1) ?? "undefined"));
+		},
+
+		async login(parsed) {
+			if (!options.login) throw new Error("browser login is only available when the vault pack is enabled");
+			const p = await current();
+			return options.login({
+				page: p,
+				args: parsed,
+				settle: () => settle(p),
+				target: (ref) => target(p, ref),
+				mark: async (locator) => {
+					await locator.evaluate((el) => el.setAttribute("data-vault-secret", "1")).catch(() => {});
+					rememberSecretField(p, locator);
+				},
+			});
 		},
 
 		async webmcp({ positional, flags }) {
@@ -711,8 +864,13 @@ async function daemon() {
 			}
 			if (action !== "fill") throw new Error("usage: browser lpt detect | browser lpt fill <lsrq_...>");
 			if (!usable) throw new Error("no usable Link Pay Token block on this page (run `browser lpt detect`)");
-			const request = await spendRequest(id, "link_pay_token");
-			const token = typeof request.link_pay_token === "string" ? request.link_pay_token : request.link_pay_token?.token;
+			let token;
+			if (vault) {
+				token = requestCard?.token;
+			} else {
+				const request = await spendRequest(id, "link_pay_token");
+				token = typeof request.link_pay_token === "string" ? request.link_pay_token : request.link_pay_token?.token;
+			}
 			if (!token) throw new Error("that spend request returned no Link Pay Token");
 			secrets.add(token);
 			await usable.frame.evaluate((value) => {
@@ -727,38 +885,68 @@ async function daemon() {
 	};
 
 	const booleans = ["full", "force", "slow", "submit"];
+
+	function absorbCard(card) {
+		if (!card) return;
+		if (typeof card.token === "string") secrets.add(card.token);
+		for (const value of Object.values(card.fields ?? {})) if (typeof value === "string" && value) secrets.add(value);
+	}
+
+	async function handle(request) {
+		if (vault) clearTimeout(idle);
+		try {
+			requestCard = request.card ?? null;
+			absorbCard(request.card);
+			const [name, ...rest] = request.argv ?? [];
+			const handler = Object.hasOwn(commands, name) ? commands[name] : undefined;
+			if (!handler) throw new Error(`unknown command "${name}"; run \`browser help\``);
+			const result = await handler(parseArgs(rest, booleans), request.cwd || process.cwd());
+			if (result && typeof result === "object" && result.png) return { text: out(result.text ?? ""), png: result.png };
+			return { text: out(String(result ?? "")) };
+		} finally {
+			if (vault) idle = setTimeout(() => void context?.close().catch(() => {}), IDLE_MS);
+		}
+	}
+
+	if (vault) return { handle };
+
 	let queue = Promise.resolve();
 	const server = http.createServer((req, res) => {
 		let body = "";
 		req.setEncoding("utf8");
-		req.on("data", (chunk) => (body += chunk));
+		req.on("data", (chunk) => {
+			body += chunk;
+			if (body.length > 2_000_000) req.destroy();
+		});
 		req.on("end", () => {
 			queue = queue.then(async () => {
 				clearTimeout(idle);
 				let reply;
 				try {
-					const { argv = [], cwd = process.cwd() } = JSON.parse(body);
-					const [name, ...rest] = argv;
-					const handler = Object.hasOwn(commands, name) ? commands[name] : undefined;
-					if (!handler) throw new Error(`unknown command "${name}"; run \`browser help\``);
-					reply = { ok: true, text: out(await handler(parseArgs(rest, booleans), cwd)) };
+					const parsed = JSON.parse(body);
+					const result = await handle({ argv: parsed.argv ?? [], cwd: parsed.cwd, card: parsed.card });
+					reply = { ok: true, text: result.text, ...(result.png ? { png: result.png } : {}) };
 				} catch (error) {
 					const message = String(error?.message ?? error).split("\n").slice(0, 6).join("\n");
 					reply = { ok: false, text: out(`error: ${message}`) };
 				}
 				idle = setTimeout(() => void commands.close(), IDLE_MS);
-				res.writeHead(200, { "content-type": "application/json" });
-				res.end(JSON.stringify(reply));
+				if (!res.writableEnded) {
+					res.writeHead(200, { "content-type": "application/json" });
+					res.end(JSON.stringify(reply));
+				}
 			});
 		});
 	});
 
-	if (existsSync(SOCKET)) {
-		if (await alive()) process.exit(0);
-		rmSync(SOCKET, { force: true });
-	}
-	server.listen(SOCKET, () => console.error(`browser daemon listening on ${SOCKET}`));
-	idle = setTimeout(() => void commands.close(), IDLE_MS);
+	void (async () => {
+		if (existsSync(SOCKET)) {
+			if (await alive()) process.exit(0);
+			rmSync(SOCKET, { force: true });
+		}
+		server.listen(SOCKET, () => console.error(`browser daemon listening on ${SOCKET}`));
+		idle = setTimeout(() => void commands.close(), IDLE_MS);
+	})();
 	for (const signal of ["SIGTERM", "SIGINT"]) {
 		process.on(signal, async () => {
 			await context?.close().catch(() => {});

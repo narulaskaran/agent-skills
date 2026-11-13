@@ -19,6 +19,7 @@ test("redact blanks security-code fields in snapshots and known secrets anywhere
 	assert.equal(redact('  - textbox "Security code" [ref=f1e9]: 123'), '  - textbox "Security code" [ref=f1e9]: [redacted]');
 	assert.equal(redact('  - textbox "CVC" [active] [ref=f2e4]: "456"'), '  - textbox "CVC" [active] [ref=f2e4]: [redacted]');
 	assert.equal(redact("token lpt_abcdefghijkl here", ["lpt_abcdefghijkl"]), "token [redacted] here");
+	assert.equal(redact("token lpt_abcdefghijkl here", new Set(["lpt_abcdefghijkl"])), "token [redacted] here");
 });
 
 test("redact hides security codes read out of the page by eval or text", () => {
