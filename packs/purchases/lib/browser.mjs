@@ -658,7 +658,7 @@ export function createBrowserHost(options = {}) {
 			const p = await current();
 			return p
 				.frames()
-				.map((f, i) => `${i}${f === p.mainFrame() ? " (main)" : ""} ${f.name() ? `name=${f.name()} ` : ""}${f.url().slice(0, 160)}`)
+				.map((f, i) => `${i}${f === p.mainFrame() ? " (main)" : ""} ${f.name() ? `name=${f.name().slice(0, 80)}${f.name().length > 80 ? "…" : ""} ` : ""}${f.url().slice(0, 160)}`)
 				.join("\n");
 		},
 
