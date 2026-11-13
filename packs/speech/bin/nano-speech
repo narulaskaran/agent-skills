@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+here="$(dirname "$(readlink -f "$0")")"
+NODE_NO_WARNINGS=1 exec node "$here/../lib/cli.ts" "$@"

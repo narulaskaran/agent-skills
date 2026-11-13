@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import { providerFetch, providerSettingsAvailable } from "./provider-client.ts";
 import { loadLocalModel } from "./config.ts";
 import { askLocal } from "./local.ts";
 
@@ -18,7 +19,13 @@ async function main(): Promise<number> {
 		console.error(USAGE);
 		return values.help ? 0 : 64;
 	}
-	const local = loadLocalModel();
+	let local = loadLocalModel();
+	if (providerSettingsAvailable()) {
+		const response = await providerFetch("/providers/config");
+		if (!response.ok) throw new Error("Could not load provider settings");
+		const settings = await response.json() as { roles: { local?: { model: string; contextWindow: number } } };
+		if (settings.roles.local) local = { modelId: settings.roles.local.model, contextWindow: settings.roles.local.contextWindow, baseUrl: "http://nano-vault/local", vault: true };
+	}
 	if (!local) {
 		console.error("nano-local: no local model configured (set NANO_LOCAL_MODEL and NANO_LOCAL_BASE_URL)");
 		return 2;

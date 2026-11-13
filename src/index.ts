@@ -5,6 +5,7 @@ import { currentTimezone, loadConfig, startTimezoneSync } from "./config.ts";
 import { createModelRuntime, LOCAL_PROVIDER } from "./models.ts";
 import { extendPath, skillPaths } from "./packs.ts";
 import { profileExists } from "./prompt.ts";
+import { providerFetch } from "./provider-client.ts";
 import { Scheduler } from "./scheduler.ts";
 import { TaskManager } from "./tasks.ts";
 import { createWorkerRunner } from "./worker.ts";
@@ -37,8 +38,8 @@ async function main(): Promise<void> {
 			throw new Error(`No credentials for ${config.modelProvider}. Set its API key in .env (see .env.example).`);
 		}
 		if (config.local) {
-			if (!modelRuntime.getModel(LOCAL_PROVIDER, config.local.modelId)) throw new Error("The local model could not be registered.");
-			const response = await fetch(`${config.local.baseUrl}/models`, { signal: AbortSignal.timeout(5000) }).catch((error: Error) => error);
+			if (!modelRuntime.getModel(config.local.vault ? "nano-vault-local" : LOCAL_PROVIDER, config.local.modelId)) throw new Error("The local model could not be registered.");
+			const response = await (config.local.vault ? providerFetch("/providers/config") : fetch(`${config.local.baseUrl}/models`, { signal: AbortSignal.timeout(5000) })).catch((error: Error) => error);
 			if (response instanceof Error || !response.ok) {
 				throw new Error(`Local model endpoint ${config.local.baseUrl} is not reachable (${response instanceof Error ? response.message : `HTTP ${response.status}`}).`);
 			}

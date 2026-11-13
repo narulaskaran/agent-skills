@@ -141,6 +141,7 @@ export class Scheduler {
 	private jobs: Job[] = [];
 	private timer?: NodeJS.Timeout;
 	private running = new Set<string>();
+	private outboxRunning = new Set<string>();
 	private readonly config: Config;
 	private readonly sink: JobSink;
 
@@ -191,16 +192,24 @@ export class Scheduler {
 	 * `{"text": "...", "kind": "message" | "task", "to": "<chat id, default owner>"}`.
 	 */
 	private async drainOutbox(): Promise<void> {
-		const dir = join(this.config.dataDir, "outbox");
+		await this.drainOutboxDir(join(this.config.dataDir, "outbox"), false);
+		for (const dir of new Set(this.config.eventOutboxDirs ?? [])) {
+			if (dir !== join(this.config.dataDir, "outbox")) await this.drainOutboxDir(dir, true);
+		}
+	}
+
+	private async drainOutboxDir(dir: string, durable: boolean): Promise<void> {
 		mkdirSync(dir, { recursive: true });
 		for (const name of readdirSync(dir).sort()) {
 			if (!/\.(txt|json)$/.test(name)) continue; // writers use a temp name, then rename
 			const path = join(dir, name);
+			if (this.outboxRunning.has(path)) continue;
+			if (durable && existsSync(path.replace(/\.(json|txt)$/, ".done"))) { rmSync(path); continue; }
 			let item: { text?: string; kind?: string; to?: string };
 			try {
 				const raw = readFileSync(path, "utf8");
 				item = name.endsWith(".json") ? JSON.parse(raw) : { text: raw };
-				rmSync(path); // remove before sending so a failure cannot cause a resend loop
+				if (!durable) rmSync(path); // Existing plain outbox keeps its one-shot behavior.
 			} catch (error) {
 				console.error(`nano: bad outbox file ${name}:`, (error as Error)?.message ?? error);
 				try {
@@ -211,12 +220,16 @@ export class Scheduler {
 			const text = item.text?.trim();
 			const to = item.to || this.config.owner;
 			if (!text || !to) continue;
+			this.outboxRunning.add(path);
 			console.error(`nano: outbox ${item.kind === "task" ? "task" : "message"} from ${name}`);
 			try {
 				if (item.kind === "task") await this.sink.task(to, text);
 				else await this.sink.send(to, text);
+				if (durable) renameSync(path, path.replace(/\.(json|txt)$/, ".done"));
 			} catch (error) {
 				console.error(`nano: outbox delivery failed for ${name}:`, (error as Error)?.message ?? error);
+			} finally {
+				this.outboxRunning.delete(path);
 			}
 		}
 	}

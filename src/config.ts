@@ -23,13 +23,21 @@ export interface Config {
 	braveApiKey?: string;
 	/** Optional second model on an OpenAI-compatible endpoint the owner runs (llama.cpp, Ollama, ...). */
 	local?: LocalModel;
+	/** Optional owner-configured background model. */
+	background?: { provider: string; modelId: string };
+	/** Non-secret revision used to refresh an existing conversation model. */
+	providerRevision?: string;
 	/** Background tasks that may run at once; more wait in a queue. */
 	maxTasks: number;
+	/** Trusted local event spools. Events are acknowledged after delivery. */
+	eventOutboxDirs?: string[];
 	/** A background task still running after this long is stopped and reported as failed. */
 	taskTimeoutMs: number;
 }
 
 export interface LocalModel {
+	/** Route this connection through the vault rather than direct HTTP. */
+	vault?: boolean;
 	modelId: string;
 	/** OpenAI-compatible base URL ending in /v1. */
 	baseUrl: string;
@@ -77,6 +85,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 		packs: list(env.NANO_PACKS ?? "core"),
 		braveApiKey: env.BRAVE_SEARCH_API_KEY || undefined,
 		local: loadLocalModel(env),
+		eventOutboxDirs: list(env.NANO_EVENT_OUTBOX_DIRS).map((path) => resolve(path)),
 		maxTasks: Math.max(1, Number(env.NANO_MAX_TASKS || 3)),
 		taskTimeoutMs: Math.max(1, Number(env.NANO_TASK_TIMEOUT_MINUTES || 30)) * 60_000,
 	};

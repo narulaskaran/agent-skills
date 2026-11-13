@@ -93,6 +93,7 @@ A pack is a folder that adds one capability. `NANO_PACKS` lists the ones to load
 <pack>/extension.ts              optional: tools and hooks (default export `(ctx) => ExtensionFactory`)
 <pack>/bin/                      optional: commands put on PATH for the agent's shell
 <pack>/install.sh                optional: system dependencies, run when the image is built
+<pack>/start-root.sh             optional: run as root at container start, before privileges drop (a pack under `data/packs/` cannot use this)
 <pack>/env.example               optional: settings the pack reads
 ```
 
@@ -102,6 +103,7 @@ Packs in `packs/` ship with Nano and should be useful to anyone. Your own workfl
 |---|---|
 | `core` | Scheduling patterns for reminders, monitors and heartbeats. |
 | `purchases` | A headless `browser` command and Stripe Link (`link-cli`) for buying things: virtual cards, Link Pay Tokens, shared payment tokens, HTTP 402 payments. Link's own app approval is the gate. See [packs/purchases](packs/purchases/README.md). |
+| `vault` | A credential store the agent can use and cannot read: website logins and API keys held by a separate user, with a write-only portal on the tailnet. Needs `purchases` for the browser. See [packs/vault](packs/vault/README.md). |
 | `google` | Gmail and Google Calendar through a `google` command, connected over chat. See [packs/google](packs/google/README.md). |
 | `mcp` | Any MCP server, listed in `data/pi/mcp.json`, with tools loaded on demand. See [packs/mcp](packs/mcp/README.md). |
 | `t3code` | Hands coding work to a T3 Code server and reports back. Needs `mcp`. See [packs/t3code](packs/t3code/README.md). |
@@ -119,3 +121,9 @@ npm install --ignore-scripts
 npm run typecheck && npm test
 NANO_CHANNEL=stdin NANO_DATA_DIR=/tmp/nano-dev DEEPSEEK_API_KEY=... npm start   # type messages on stdin
 ```
+
+### Provider settings and speech
+
+With the `vault` pack enabled, its portal manages provider connections and per-job model choices: main conversation, background work, private/local work, transcription and speech generation. It supports OpenAI-compatible, Anthropic Messages and custom JSON API shapes, plus native Bark and Woof speech services. API keys remain in the vault; local private work cannot fall back to a hosted provider. See [vault](packs/vault/README.md).
+
+Enable the [speech pack](packs/speech/README.md) too for `nano-speech stt` and `nano-speech tts`, audio conversion and the corresponding skill. Provider settings persist in the vault volume and take effect on the next request.

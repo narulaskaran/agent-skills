@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, extname, join } from "node:path";
 import { createInterface } from "node:readline";
 import type { Config } from "./config.ts";
 
@@ -18,11 +18,20 @@ export interface Inbound {
 	files: InboundFile[];
 }
 
+export interface SendFileOptions {
+	/** undefined: voice memo for audio files, attachment otherwise. true: voice memo only. false: plain attachment. */
+	asVoice?: boolean;
+}
+
 export interface Channel {
 	/** Resolves when the channel stops. `onMessage` must not throw. */
 	start(onMessage: (message: Inbound) => void): Promise<void>;
 	send(spaceId: string, text: string): Promise<void>;
-	sendFile(spaceId: string, path: string, caption?: string): Promise<void>;
+	/**
+	 * Audio files go out as native iMessage voice memos unless `asVoice` is false; `asVoice: true` insists on a
+	 * voice memo and fails if the file is not audio. Everything else is a plain attachment.
+	 */
+	sendFile(spaceId: string, path: string, caption?: string, options?: SendFileOptions): Promise<void>;
 	typing(spaceId: string, on: boolean): Promise<void>;
 	stop(): Promise<void>;
 }
@@ -38,6 +47,53 @@ const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
  */
 export function chooseFormat(body: string): "markdown" | "text" {
 	return MARKDOWN_RE.test(body) && !URL_RE.test(body) ? "markdown" : "text";
+}
+
+const AUDIO_MIME_TYPES: Record<string, string> = {
+	".m4a": "audio/mp4",
+	".aac": "audio/aac",
+	".mp3": "audio/mpeg",
+	".wav": "audio/wav",
+	".aif": "audio/aiff",
+	".aiff": "audio/aiff",
+	".flac": "audio/flac",
+	".caf": "audio/x-caf",
+};
+
+/** The audio/* mime type for a file name, or undefined when the extension is not a known audio format. */
+export function audioMimeType(path: string): string | undefined {
+	return AUDIO_MIME_TYPES[extname(path).toLowerCase()];
+}
+
+type SpectrumCore = Pick<typeof import("@spectrum-ts/core"), "attachment" | "voice">;
+
+/**
+ * Sends a file as a native iMessage voice memo (waveform bubble, plays inline) or as a plain attachment.
+ *
+ * The Photon adapter only needs m4a/aac for a voice memo; anything else is transcoded with ffmpeg at send time,
+ * which is installed by the speech pack. When the choice was automatic (`asVoice` unset) and the voice send fails, the
+ * file still goes out as an attachment, as before. An explicit `asVoice: true` reports the failure instead.
+ */
+export async function sendFileContent(
+	space: { send(content: unknown): Promise<unknown> },
+	core: SpectrumCore,
+	path: string,
+	asVoice?: boolean,
+): Promise<"voice" | "attachment"> {
+	const name = basename(path);
+	const mimeType = audioMimeType(path);
+	if (asVoice === true && !mimeType) throw new Error(`as_voice needs an audio file (m4a, mp3, wav, aiff, flac, caf), got ${name}`);
+	if (mimeType && asVoice !== false) {
+		try {
+			await space.send(core.voice(path, { name, mimeType }));
+			return "voice";
+		} catch (error) {
+			if (asVoice === true) throw error;
+			console.error(`nano: voice memo send failed for ${name}, sending it as an attachment:`, (error as Error)?.message ?? error);
+		}
+	}
+	await space.send(core.attachment(path, { name }));
+	return "attachment";
 }
 
 function safeName(name: string): string {
@@ -161,9 +217,9 @@ export async function createPhotonChannel(config: Config): Promise<Channel> {
 			const builder = chooseFormat(body) === "markdown" ? core.markdown(body) : core.text(body);
 			await space.send(builder);
 		},
-		async sendFile(spaceId, path, caption) {
+		async sendFile(spaceId, path, caption, options) {
 			const space = await resolveSpace(spaceId);
-			await space.send(core.attachment(path, { name: basename(path) }));
+			await sendFileContent(space, core, path, options?.asVoice);
 			if (caption) await space.send(core.text(caption));
 		},
 		async typing(spaceId, on) {
@@ -197,8 +253,9 @@ export function createStdinChannel(): Channel {
 		async send(_spaceId, body) {
 			process.stdout.write(`\nnano> ${body}\n`);
 		},
-		async sendFile(_spaceId, path, caption) {
-			process.stdout.write(`\nnano> [file ${path}]${caption ? ` ${caption}` : ""}\n`);
+		async sendFile(_spaceId, path, caption, options) {
+			const voice = options?.asVoice ?? audioMimeType(path) !== undefined;
+			process.stdout.write(`\nnano> [${voice ? "voice memo" : "file"} ${path}]${caption ? ` ${caption}` : ""}\n`);
 		},
 		async typing() {},
 		async stop() {

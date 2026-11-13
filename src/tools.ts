@@ -165,15 +165,21 @@ export function nanoTools(
 			label: "Send file",
 			description: extra.worker
 				? "Attach a file from disk to your result. Nano decides whether to send it to the owner."
-				: "Send a file or image from disk to the person you are talking to, as an attachment in the chat. Use for pictures, PDFs, exports.",
+				: "Send a file or image from disk to the person you are talking to, as an attachment in the chat. Use for pictures, PDFs, exports. An audio file (m4a/aac, such as a spoken reply from the voice-reply skill) arrives as a native iMessage voice memo that plays inline; pass as_voice: false to send audio as a plain file instead.",
 			parameters: Type.Object({
 				path: Type.String({ description: "Absolute path, or relative to the workspace" }),
 				caption: Type.Optional(Type.String({ description: "Short text sent right after the file" })),
+				as_voice: Type.Optional(
+					Type.Boolean({
+						description:
+							"Audio files only. Default (unset): audio is sent as a voice memo. true: insist on a voice memo (m4a/aac plays inline; other formats need conversion). false: send the audio as a plain file attachment.",
+					}),
+				),
 			}),
 			async execute(_id, params) {
 				const path = workspacePath(config, params.path);
 				if (!existsSync(path)) throw new Error(`No such file: ${path}`);
-				await channel.sendFile(spaceId, path, params.caption);
+				await channel.sendFile(spaceId, path, params.caption, { asVoice: params.as_voice });
 				return text(extra.worker ? `Attached ${path} to your result` : `Sent ${path}`);
 			},
 		});

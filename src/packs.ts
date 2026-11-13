@@ -14,6 +14,7 @@ import type { Scheduler } from "./scheduler.ts";
  *   <pack>/extension.ts              optional: default export (ctx) => ExtensionFactory | ExtensionFactory[]
  *   <pack>/bin/                      optional: commands put on PATH for the agent's shell
  *   <pack>/install.sh                optional: run as root when the image is built (repo packs only)
+ *   <pack>/start-root.sh             optional: run as root at container start, before privileges drop (repo packs only)
  *   <pack>/env.example               optional: settings the pack reads
  *
  * Packs shipped with Nano live in `packs/`. Private ones live in `<data>/packs/` and are

@@ -1,3 +1,4 @@
+import { roleFetch } from "./provider-client.ts";
 import type { LocalModel } from "./config.ts";
 
 /**
@@ -50,7 +51,7 @@ export function fitInput(input: string, contextWindow: number): string {
 export function localChat(local: LocalModel): ChatFn {
 	let noThinking = true;
 	const post = async (messages: ChatMessage[], extra: object, signal?: AbortSignal) => {
-		const response = await fetch(`${local.baseUrl}/chat/completions`, {
+		const response = await (local.vault ? roleFetch("local") : fetch)(`${local.baseUrl}/chat/completions`, {
 			method: "POST",
 			signal: signal ?? AbortSignal.timeout(120_000),
 			headers: { "content-type": "application/json", ...(local.apiKey ? { authorization: `Bearer ${local.apiKey}` } : {}) },

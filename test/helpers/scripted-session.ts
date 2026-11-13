@@ -59,6 +59,7 @@ export async function scriptedConversation(options: { packs: string; env?: Recor
 	return {
 		config,
 		dataDir,
+		channel,
 		conversation,
 		script(steps: FauxResponseStep[]) {
 			faux.setResponses(steps);
