@@ -42,7 +42,7 @@ Pages
 
 Acting (targets are refs from the latest snapshot, or Playwright selectors such as "text=Pay" or "#email")
   click <target> [--force]
-  type <target> <text> [--slow] [--submit]   replace the field's content; --slow types key by key
+  type <target> <text> [--slow] [--submit] [--verify-digits]   replace the field's content; --slow types key by key
   insert <text>                  insert text into the focused element as trusted input (CDP Input.insertText)
   press <key>                    Enter, Tab, Escape, ArrowDown, ...
   select <target> <value>...     choose option(s) by value or label
@@ -59,6 +59,12 @@ Payments
   webmcp call <tool> <json>      invoke a WebMCP tool as an agent
   lpt detect                     look for Stripe's Link Pay Token block (.AiAgentPaymentSteering)
   lpt fill <lsrq_...>            put the approved request's Link Pay Token into that block
+
+Diagnosing
+  network [--all] [--grep text] [--last N] [--clear]
+                                 what the page's own requests did: status, method, host and path (query values
+                                 are dropped), and a short redacted body for fetch/XHR calls. Default: errors,
+                                 failed requests, and payment-looking calls. Use it when a submit does nothing
 
 Session
   status | close`;
@@ -109,6 +115,9 @@ export function hasPlaceholders(text) {
 export function cardFields(card) {
 	const month = String(card.exp_month ?? "").padStart(2, "0");
 	const year = String(card.exp_year ?? "");
+	if (!/^(0[1-9]|1[0-2])$/.test(month) || !/^(\d{2}|\d{4})$/.test(year)) {
+		throw new Error("the Link card has missing or invalid expiry metadata; no payment field was filled");
+	}
 	const yy = year.slice(-2);
 	const billing = card.billing_address ?? {};
 	return {
@@ -126,6 +135,29 @@ export function cardFields(card) {
 		postal_code: billing.postal_code ?? "",
 		country: billing.country ?? "",
 	};
+}
+
+/** Confirm that a formatted payment input retained the secret, without returning it. */
+export async function fillNumericPaymentField(field, value, slow = false) {
+	if (!/^[\d\s/]+$/.test(value)) throw new Error("invalid numeric payment field data");
+	const digits = value.replace(/\D/g, "");
+	if (!digits) throw new Error("missing numeric payment field data");
+	const retained = async () => (await field.inputValue()).replace(/\D/g, "") === digits;
+	if (slow) {
+		await field.click();
+		await field.fill("");
+		await field.pressSequentially(value, { delay: 60 });
+	} else {
+		await field.fill(value);
+	}
+	await field.press("Tab");
+	if (await retained()) return;
+	// Hosted expiry masks may reject a pasted slash or insert their own separator.
+	await field.click();
+	await field.fill("");
+	await field.pressSequentially(digits, { delay: 60 });
+	await field.press("Tab");
+	if (!(await retained())) throw new Error("payment field did not retain the expected digits; stop before submitting payment");
 }
 
 export function fillPlaceholders(text, fields) {
@@ -158,6 +190,59 @@ export function interactiveOnly(snapshot) {
 	return snapshot
 		.split("\n")
 		.filter((line) => INTERACTIVE.test(line))
+		.join("\n");
+}
+
+const PAYMENT_URL = /pay|order|checkout|charge|card|3ds|3d-secure|confirm|transaction|top_?up|recharge|purchase|billing|invoice|intent/i;
+const SECRET_KEY = /token|secret|pass|auth|session|jwt|cookie|credential|key|signature|nonce|csrf|otp/i;
+const OPAQUE = /[A-Za-z0-9._~+/=-]{32,}/g;
+
+/** Host and path only. Query values and fragments can carry tokens, so only parameter names are kept. */
+export function sanitizeNetworkUrl(raw) {
+	try {
+		const url = new URL(raw);
+		const names = [...new Set(url.searchParams.keys())].slice(0, 6);
+		return `${url.host}${url.pathname.slice(0, 120)}${names.length ? `?${names.join("&")}=…` : ""}`;
+	} catch {
+		return String(raw).slice(0, 80);
+	}
+}
+
+/**
+ * A short, safe view of a response body. JSON values under token-like keys and any long opaque
+ * string are replaced, so a login or session response cannot hand credentials to the model.
+ */
+export function sanitizeBody(text, max = 500) {
+	let body = String(text ?? "").trim();
+	if (!body) return "";
+	try {
+		const walk = (value, key = "") => {
+			if (typeof value === "string") return SECRET_KEY.test(key) || /^[A-Za-z0-9._~+/=-]{32,}$/.test(value) ? "[redacted]" : value;
+			if (Array.isArray(value)) return value.slice(0, 20).map((item) => walk(item, key));
+			if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).slice(0, 40).map(([k, v]) => [k, walk(v, k)]));
+			return value;
+		};
+		body = JSON.stringify(walk(JSON.parse(body)));
+	} catch {
+		body = body.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().replace(OPAQUE, "[redacted]");
+	}
+	return body.length > max ? `${body.slice(0, max)}…` : body;
+}
+
+export function formatNetwork(entries, { all = false, grep = "", last = 40 } = {}) {
+	const interesting = (e) =>
+		e.kind === "console" || e.failed || e.status >= 400 || PAYMENT_URL.test(e.url) || (all && ["document", "xhr", "fetch", "other"].includes(e.type));
+	let rows = entries.filter((e) => (all ? e.kind === "console" || ["document", "xhr", "fetch", "other"].includes(e.type) || e.failed : interesting(e)));
+	if (grep) rows = rows.filter((e) => `${e.url} ${e.body ?? ""} ${e.text ?? ""}`.toLowerCase().includes(String(grep).toLowerCase()));
+	rows = rows.slice(-Math.max(1, Number(last) || 40));
+	if (rows.length === 0) return "no matching requests recorded (the log starts when the browser does; try --all)";
+	return rows
+		.map((e) => {
+			const time = new Date(e.at).toISOString().slice(11, 19);
+			if (e.kind === "console") return `${time} console.${e.level}: ${e.text}`;
+			const head = `${time} ${e.failed ? `FAILED(${e.failed})` : e.status} ${e.method} ${e.type} ${e.url}`;
+			return e.body ? `${head}\n    body: ${e.body}` : head;
+		})
 		.join("\n");
 }
 
@@ -218,7 +303,7 @@ async function spendRequest(id, include) {
 /** Resolve Link card data in this process. The returned object is never printed. */
 async function cardSideChannel(argv) {
 	const [command, ...rest] = argv;
-	const { positional, flags } = parseArgs(rest, ["full", "force", "slow", "submit"]);
+	const { positional, flags } = parseArgs(rest, ["full", "force", "slow", "submit", "verify-digits"]);
 	if (command === "lpt" && positional[0] === "fill") {
 		const request = await spendRequest(positional[1], "link_pay_token");
 		const token = typeof request.link_pay_token === "string" ? request.link_pay_token : request.link_pay_token?.token;
@@ -350,6 +435,11 @@ export function createBrowserHost(options = {}) {
 	const mcp = new WeakMap(); // page -> { session, tools: Map<key, tool> }
 	let idle;
 	let requestCard = null;
+	const netLog = []; // recent requests and console errors, newest last; no request bodies or headers
+	const pushNet = (entry) => {
+		netLog.push({ at: Date.now(), ...entry });
+		if (netLog.length > 400) netLog.splice(0, netLog.length - 400);
+	};
 
 	function userAgent() {
 		try {
@@ -368,6 +458,11 @@ export function createBrowserHost(options = {}) {
 			notes.push(`[page ${dialog.type()} accepted: ${dialog.message().slice(0, 200)}]`);
 			void dialog.accept().catch(() => {});
 		});
+		p.on("console", (message) => {
+			if (message.type() !== "error" && message.type() !== "warning") return;
+			pushNet({ kind: "console", level: message.type(), text: sanitizeBody(message.text(), 240) });
+		});
+		p.on("pageerror", (error) => pushNet({ kind: "console", level: "pageerror", text: sanitizeBody(String(error?.message ?? error), 240) }));
 		p.on("download", async (download) => {
 			mkdirSync(downloadsDir, { recursive: true });
 			let name = safeDownloadName(download.suggestedFilename());
@@ -414,6 +509,21 @@ export function createBrowserHost(options = {}) {
 		context.on("close", () => {
 			context = undefined;
 			page = undefined;
+		});
+		context.on("response", (response) => {
+			void (async () => {
+				const request = response.request();
+				const type = request.resourceType();
+				const entry = { method: request.method(), type, status: response.status(), url: sanitizeNetworkUrl(response.url()) };
+				if (type === "xhr" || type === "fetch" || (type === "document" && response.status() >= 400)) {
+					const text = await response.text().catch(() => "");
+					entry.body = sanitizeBody(text);
+				}
+				pushNet(entry);
+			})();
+		});
+		context.on("requestfailed", (request) => {
+			pushNet({ method: request.method(), type: request.resourceType(), status: 0, url: sanitizeNetworkUrl(request.url()), failed: request.failure()?.errorText ?? "failed" });
 		});
 		context.on("page", (p) => {
 			watch(p);
@@ -605,6 +715,15 @@ export function createBrowserHost(options = {}) {
 			return `running, ${context.pages().length} tab(s), active: ${await p.title().catch(() => "")} ${p.url()}\nprofile ${profileDir}`;
 		},
 
+		async network({ flags }) {
+			if (flags.clear) {
+				netLog.splice(0);
+				return "network log cleared";
+			}
+			await new Promise((r) => setTimeout(r, 300)); // let response bodies still being read land
+			return formatNetwork(netLog, { all: Boolean(flags.all), grep: typeof flags.grep === "string" ? flags.grep : "", last: flags.last });
+		},
+
 		async close() {
 			await context?.close().catch(() => {});
 			if (!vault) setTimeout(() => process.exit(0), 50);
@@ -737,7 +856,11 @@ export function createBrowserHost(options = {}) {
 			const [ref, ...words] = positional;
 			const { value, secret } = await resolveSecrets(words.join(" "), flags);
 			const field = target(p, ref);
-			if (flags.slow) {
+			const numericPayment = Boolean(flags["verify-digits"]) || (secret && /\{\{\s*card\.(number|cvc|exp|exp_month|exp_year|exp_yy)\s*\}\}/.test(words.join(" ")));
+			if (secret) rememberSecretField(p, field);
+			if (numericPayment) {
+				await fillNumericPaymentField(field, value, Boolean(flags.slow));
+			} else if (flags.slow) {
 				await field.click();
 				await field.fill("").catch(() => {});
 				await field.pressSequentially(value, { delay: 60 });
@@ -749,7 +872,6 @@ export function createBrowserHost(options = {}) {
 					await p.keyboard.insertText(value);
 				}
 			}
-			if (secret) rememberSecretField(p, field);
 			if (flags.submit) {
 				await field.press("Enter");
 				await settle(p, 3000);
@@ -915,7 +1037,7 @@ export function createBrowserHost(options = {}) {
 		},
 	};
 
-	const booleans = ["full", "force", "slow", "submit"];
+	const booleans = ["full", "force", "slow", "submit", "verify-digits", "all", "clear"];
 
 	function absorbCard(card) {
 		if (!card) return;

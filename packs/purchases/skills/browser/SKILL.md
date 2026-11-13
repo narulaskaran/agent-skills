@@ -22,6 +22,7 @@ Targets can also be Playwright selectors: `"text=Add to cart"`, `"#email"`, `"ro
 - `browser frames` lists iframes; `browser tabs` and `browser tab <n>` handle new tabs (a click that opens one switches to it automatically).
 - `browser wait "Order confirmed"`, `browser wait --url /thank-you`, `browser wait 2000`.
 - `browser eval "<js expression>" [--frame <n|url part>]` reads anything the snapshot misses.
+- `browser network` shows what the page's own requests did: status codes, failed calls, and a short redacted body for fetch/XHR calls (query values and token-like fields are dropped). After a submit that does nothing, or an order that comes back cancelled, run it right after the click: `browser network --clear`, click, wait a few seconds, `browser network`. The server's refusal reason is usually there, and a page often shows nothing at all.
 
 ## Payment fields
 Card fields in cross-origin iframes (Stripe Elements, Shopify, Adyen) show up in the snapshot with `f…` refs. `browser type f1e3 …` sends real keystrokes into them. Never paste a card number yourself: see [references/payments.md](references/payments.md) for `{{card.*}}` placeholders, WebMCP tools and Stripe's Link Pay Token.
